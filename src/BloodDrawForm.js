@@ -30,7 +30,7 @@ import {
 } from '@chakra-ui/react';
 import { Image as ChakraImage } from '@chakra-ui/react';
 import { supabase } from './supabaseClient';
-import { useParams, useLocation, Link as RouterLink } from 'react-router-dom';
+import { useParams, useLocation, Link as RouterLink, useSearchParams } from 'react-router-dom';
 import { analyzeImage } from './aiService'; // Import the AI service
 
 const initialState = {
@@ -227,6 +227,8 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
   const [showShareLink, setShowShareLink] = useState(false);
   const [copied, setCopied] = useState(false);
   const [upcomingDraws, setUpcomingDraws] = useState([]);
+  const [searchParams] = useSearchParams();
+  const emailFromQuery = searchParams.get('email');
 
   useEffect(() => {
     if (id) {
@@ -357,7 +359,7 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
               <Text mb={4} fontSize="lg" fontWeight="medium" color="blue.400">
                 Patient, Doctor, and Lab Information
               </Text>
-              <Grid templateColumns={{ base: '1fr', md: 'repeat(2, 1fr)' }} gap={6}>
+              <Grid templateColumns={'1fr'} gap={6}>
                 {/* Patient Fields */}
                 <GridItem>
                   <FloatingInput label="Patient Name" id="patientName" name="patientName" value={form.patientName} onChange={handleChange} />
@@ -401,7 +403,7 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
                 <GridItem>
                   <FloatingInput label="Blood Collection Time" id="bloodCollectionTime" name="bloodCollectionTime" type="datetime-local" value={form.bloodCollectionTime} onChange={handleChange} />
                 </GridItem>
-                <GridItem colSpan={2}>
+                <GridItem>
                   <FormControl>
                     <FormLabel>Special Instructions</FormLabel>
                     <Input as="textarea" name="specialInstructions" value={form.specialInstructions || ''} onChange={handleChange} placeholder="Any special instructions..." />
@@ -432,7 +434,7 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
               <Text mb={4} color="gray.300">
                 Please provide your insurance information below. All fields are optional.
               </Text>
-              <Grid templateColumns={{ base: '1fr', md: 'repeat(2, 1fr)' }} gap={6}>
+              <Grid templateColumns={'1fr'} gap={6}>
                 <GridItem>
                   <FloatingInput
                     label="Insurance Provider"
@@ -541,8 +543,8 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
               <Text mb={4} color="gray.300">
                 Please provide the delivery information below. All fields are optional.
               </Text>
-              <Grid templateColumns={{ base: '1fr', md: 'repeat(2, 1fr)' }} gap={6}>
-                <GridItem colSpan={2}>
+              <Grid templateColumns={'1fr'} gap={6}>
+                <GridItem>
                   <FormControl>
                     <FormLabel>Choose Previously Used Address</FormLabel>
                     <Select name="deliveryTemplate" value={form.deliveryTemplate} onChange={handleChange} placeholder="Select delivery template">
@@ -552,10 +554,10 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
                     </Select>
                   </FormControl>
                 </GridItem>
-                <GridItem colSpan={2}>
+                <GridItem>
                   <Text fontSize="md" fontWeight="medium" color="blue.400">Add New Address</Text>
                 </GridItem>
-                <GridItem colSpan={2}>
+                <GridItem>
                   <FloatingInput
                     label="Address Line 1"
                     id="addressLine1"
@@ -592,7 +594,7 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
                     onChange={handleChange}
                   />
                 </GridItem>
-                <GridItem colSpan={2}>
+                <GridItem>
                   <Button colorScheme="blue" onClick={handleSavePickupAddress}>
                     Save Pickup Address
                   </Button>
@@ -600,12 +602,12 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
                     <Text color="green.500" mt={2}>Address saved successfully!</Text>
                   )}
                 </GridItem>
-                <GridItem colSpan={2}>
+                <GridItem>
                   <Button colorScheme="blue" onClick={handleRequestFedExLabel}>
                     Request New FedEx Label
                   </Button>
                 </GridItem>
-                <GridItem colSpan={2}>
+                <GridItem>
                   <FormControl>
                     <FormLabel>Past Requests</FormLabel>
                     <Table variant="simple">
@@ -732,6 +734,14 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
   const newRequests = upcomingDraws.filter(draw => draw.status === 'new_request');
   const upcoming = upcomingDraws.filter(draw => !draw.status || draw.status === 'upcoming');
 
+  // Prefill patient email if emailFromQuery exists
+  useEffect(() => {
+    if (emailFromQuery) {
+      setForm(f => ({ ...f, patientEmail: emailFromQuery }));
+    }
+    // eslint-disable-next-line
+  }, [emailFromQuery]);
+
   return (
     <Box minH="100vh" bg="gray.50" color="gray.800" py={8}>
       <Container maxW="container.xl">
@@ -739,85 +749,83 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
           <Box as="header" w="100%" textAlign="center" mb={4}>
             <ChakraImage src="/qls-logo.png" alt="Quality Laboratory Service Logo" maxH="70px" mx="auto" mb={2} />
           </Box>
+          {/* If emailFromQuery, show read-only email and share button; else show input */}
           {!isPatientMode && (
-            <Box mb={4} p={4} bg="gray.100" borderRadius="md" boxShadow="sm">
-              <Text fontWeight="bold" mb={2}>Generate Patient Form Link</Text>
-              <HStack>
-                <Input
-                  placeholder="Enter patient email"
-                  value={patientEmailForShare}
-                  onChange={e => setPatientEmailForShare(e.target.value)}
-                  size="md"
-                  width="auto"
-                />
-                <IconButton
-                  icon={<FaShareAlt />}
-                  colorScheme="blue"
-                  aria-label="Share patient form"
-                  isDisabled={!patientEmailForShare}
-                  onClick={async () => {
-                    setShowShareLink(true);
-                    const link = `${window.location.origin}/lab/${id}/patient/${encodeURIComponent(patientEmailForShare)}`;
-                    navigator.clipboard.writeText(link);
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 1500);
-                    // Save to Supabase
-                    const { error } = await supabase.from('upcoming_draws').insert([
-                      { lab_id: id, patient_email: patientEmailForShare, status: 'upcoming', created_at: new Date().toISOString() }
-                    ]);
-                    if (error) toast({ title: 'Error saving upcoming draw', description: error.message, status: 'error' });
-                  }}
-                />
-              </HStack>
-              {showShareLink && patientEmailForShare && (
-                <Box mt={2}>
-                  <Text fontSize="sm">Share this link with the patient:</Text>
-                  <HStack>
-                    <Input
-                      value={`${window.location.origin}/lab/${id}/patient/${encodeURIComponent(patientEmailForShare)}`}
-                      isReadOnly
-                      size="sm"
-                    />
-                    <Button size="sm" onClick={() => {
-                      navigator.clipboard.writeText(`${window.location.origin}/lab/${id}/patient/${encodeURIComponent(patientEmailForShare)}`);
+            emailFromQuery ? (
+              <Box mb={4} p={4} bg="gray.100" borderRadius="md" boxShadow="sm">
+                <Text fontWeight="bold" mb={2}>Patient Email</Text>
+                <HStack>
+                  <Input value={emailFromQuery} isReadOnly size="md" width="auto" />
+                  <Button
+                    size="md"
+                    colorScheme="blue"
+                    variant="outline"
+                    borderRadius="md"
+                    onClick={() => {
+                      const link = `${window.location.origin}/lab/${id}/patient/${encodeURIComponent(emailFromQuery)}`;
+                      navigator.clipboard.writeText(link);
+                      toast({
+                        title: 'Link copied!',
+                        description: 'Patient form link copied to clipboard. You can now share it.',
+                        status: 'success',
+                        duration: 2000,
+                        isClosable: true,
+                      });
+                    }}
+                  >
+                    Share Patient Form Link
+                  </Button>
+                </HStack>
+              </Box>
+            ) : (
+              <Box mb={4} p={4} bg="gray.100" borderRadius="md" boxShadow="sm">
+                <Text fontWeight="bold" mb={2}>Generate Patient Form Link</Text>
+                <HStack>
+                  <Input
+                    placeholder="Enter patient email"
+                    value={patientEmailForShare}
+                    onChange={e => setPatientEmailForShare(e.target.value)}
+                    size="md"
+                    width="auto"
+                  />
+                  <IconButton
+                    icon={<FaShareAlt />}
+                    colorScheme="blue"
+                    aria-label="Share patient form"
+                    isDisabled={!patientEmailForShare}
+                    onClick={async () => {
+                      setShowShareLink(true);
+                      const link = `${window.location.origin}/lab/${id}/patient/${encodeURIComponent(patientEmailForShare)}`;
+                      navigator.clipboard.writeText(link);
                       setCopied(true);
                       setTimeout(() => setCopied(false), 1500);
-                    }}>{copied ? "Copied!" : "Copy"}</Button>
-                  </HStack>
-                </Box>
-              )}
-            </Box>
-          )}
-          {/* Patient Draws Section - grouped by status */}
-          {!isPatientMode && (
-            <>
-              {newRequests.length > 0 && (
-                <Box mb={2} p={4} bg="yellow.50" borderRadius="md" boxShadow="sm">
-                  <Text fontWeight="bold" mb={2}>New Requests</Text>
-                  <VStack align="start" spacing={2}>
-                    {newRequests.map(draw => (
-                      <HStack key={draw.id}>
-                        <Text>{draw.patient_email}</Text>
-                        <Button as="a" href={`/lab/${id}/patient/${encodeURIComponent(draw.patient_email)}`} size="sm" colorScheme="blue" target="_blank">Open Form</Button>
-                      </HStack>
-                    ))}
-                  </VStack>
-                </Box>
-              )}
-              {upcoming.length > 0 && (
-                <Box mb={4} p={4} bg="blue.50" borderRadius="md" boxShadow="sm">
-                  <Text fontWeight="bold" mb={2}>Upcoming</Text>
-                  <VStack align="start" spacing={2}>
-                    {upcoming.map(draw => (
-                      <HStack key={draw.id}>
-                        <Text>{draw.patient_email}</Text>
-                        <Button as="a" href={`/lab/${id}/patient/${encodeURIComponent(draw.patient_email)}`} size="sm" colorScheme="blue" target="_blank">Open Form</Button>
-                      </HStack>
-                    ))}
-                  </VStack>
-                </Box>
-              )}
-            </>
+                      // Save to Supabase
+                      const { error } = await supabase.from('upcoming_draws').insert([
+                        { lab_id: id, patient_email: patientEmailForShare, status: 'upcoming', created_at: new Date().toISOString() }
+                      ]);
+                      if (error) toast({ title: 'Error saving upcoming draw', description: error.message, status: 'error' });
+                    }}
+                  />
+                </HStack>
+                {showShareLink && patientEmailForShare && (
+                  <Box mt={2}>
+                    <Text fontSize="sm">Share this link with the patient:</Text>
+                    <HStack>
+                      <Input
+                        value={`${window.location.origin}/lab/${id}/patient/${encodeURIComponent(patientEmailForShare)}`}
+                        isReadOnly
+                        size="sm"
+                      />
+                      <Button size="sm" onClick={() => {
+                        navigator.clipboard.writeText(`${window.location.origin}/lab/${id}/patient/${encodeURIComponent(patientEmailForShare)}`);
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 1500);
+                      }}>{copied ? "Copied!" : "Copy"}</Button>
+                    </HStack>
+                  </Box>
+                )}
+              </Box>
+            )
           )}
           {/* The rest of the form/page content always visible below */}
           <HStack spacing={4} mb={8} justify="center">

@@ -161,7 +161,7 @@ const PhlebotomistDashboard = () => {
   };
 
   // Group draws by status
-  const upcomingNew = patientDraws.filter(draw => draw.status === 'new_request');
+  const newRequests = patientDraws.filter(draw => draw.status === 'new_request');
   const upcoming = patientDraws.filter(draw => !draw.status || draw.status === 'upcoming');
 
   return (
@@ -197,34 +197,6 @@ const PhlebotomistDashboard = () => {
             <Text color="gray.500" fontSize="sm">Contact: {companyInfo.full_name} | {companyInfo.email} | {companyInfo.phone}</Text>
           </Box>
         )}
-        {/* Upcoming (new_request) and Upcoming (upcoming) sections */}
-        {upcomingNew.length > 0 && (
-          <Box mb={2} p={4} bg="yellow.50" borderRadius="md" boxShadow="sm">
-            <Text fontWeight="bold" mb={2}>Upcoming</Text>
-            <VStack align="start" spacing={2}>
-              {upcomingNew.map(draw => (
-                <HStack key={draw.id}>
-                  <Text>{draw.patient_email}</Text>
-                  <Button as="a" href={`/lab/${id}/patient/${encodeURIComponent(draw.patient_email)}`} size="sm" colorScheme="blue" target="_blank">Open Form</Button>
-                </HStack>
-              ))}
-            </VStack>
-          </Box>
-        )}
-        {upcoming.length > 0 && (
-          <Box mb={4} p={4} bg="blue.50" borderRadius="md" boxShadow="sm">
-            <Text fontWeight="bold" mb={2}>Upcoming (Not Started)</Text>
-            <VStack align="start" spacing={2}>
-              {upcoming.map(draw => (
-                <HStack key={draw.id}>
-                  <Text>{draw.patient_email}</Text>
-                  <Button as="a" href={`/lab/${id}/patient/${encodeURIComponent(draw.patient_email)}`} size="sm" colorScheme="blue" target="_blank">Open Form</Button>
-                </HStack>
-              ))}
-            </VStack>
-          </Box>
-        )}
-
         {/* Large New Blood Draw button */}
         <Button
           colorScheme="blue"
@@ -238,26 +210,17 @@ const PhlebotomistDashboard = () => {
         >
           + New Blood Draw
         </Button>
-
+        {/* Dashboard tabs and content */}
         <HStack justify="space-between">
           <Text fontSize="2xl" fontWeight="bold">
             Dashboard
           </Text>
         </HStack>
-
-        <Tabs>
+        <Tabs variant="unstyled" colorScheme="blue">
           <TabList>
-            <Tab>
-              New Requests
-              {appointments.new.length > 0 && (
-                <Badge ml={2} colorScheme="red">
-                  {appointments.new.length}
-                </Badge>
-              )}
-            </Tab>
+            <Tab>New Requests</Tab>
             <Tab>Past</Tab>
           </TabList>
-
           <TabPanels>
             <TabPanel>
               <VStack spacing={4} align="stretch">
@@ -271,7 +234,6 @@ const PhlebotomistDashboard = () => {
                 ))}
               </VStack>
             </TabPanel>
-
             <TabPanel>
               <VStack spacing={4} align="stretch">
                 {appointments.past.map((appointment) => (
@@ -285,6 +247,52 @@ const PhlebotomistDashboard = () => {
             </TabPanel>
           </TabPanels>
         </Tabs>
+        {/* New Requests and Upcoming sections below dashboard tabs */}
+        {newRequests.length > 0 && (
+          <Box mb={2} p={4} bg="yellow.50" borderRadius="md" boxShadow="sm">
+            <Text fontWeight="bold" mb={2}>New Requests</Text>
+            <VStack align="start" spacing={2}>
+              {newRequests.map(draw => (
+                <HStack key={draw.id}>
+                  <Text>{draw.patient_email}</Text>
+                  <Button as="a" href={`/lab/${id}/patient/${encodeURIComponent(draw.patient_email)}`} size="sm" colorScheme="blue" target="_blank">Open Form</Button>
+                </HStack>
+              ))}
+            </VStack>
+          </Box>
+        )}
+        {upcoming.length > 0 && (
+          <Box mb={4} p={4} bg="blue.50" borderRadius="md" boxShadow="sm">
+            <Text fontWeight="bold" mb={2}>Upcoming</Text>
+            <VStack align="start" spacing={2}>
+              {upcoming.map(draw => (
+                <HStack key={draw.id} spacing={3}>
+                  <Text>{draw.patient_email}</Text>
+                  <Button as="a" href={`/lab/${id}/new-blood-draw?email=${encodeURIComponent(draw.patient_email)}`} size="sm" colorScheme="blue" variant="outline" borderRadius="md" target="_blank">Finish Draw File</Button>
+                  <Button
+                    size="sm"
+                    colorScheme="blue"
+                    variant="outline"
+                    borderRadius="md"
+                    onClick={() => {
+                      const link = `${window.location.origin}/lab/${id}/patient/${encodeURIComponent(draw.patient_email)}`;
+                      navigator.clipboard.writeText(link);
+                      toast({
+                        title: 'Link copied!',
+                        description: 'Patient form link copied to clipboard. You can now share it.',
+                        status: 'success',
+                        duration: 2000,
+                        isClosable: true,
+                      });
+                    }}
+                  >
+                    Share Patient Form Link
+                  </Button>
+                </HStack>
+              ))}
+            </VStack>
+          </Box>
+        )}
       </VStack>
 
       {showWorkingHoursForm && (
