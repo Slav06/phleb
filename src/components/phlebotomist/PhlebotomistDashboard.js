@@ -16,8 +16,13 @@ import {
   Grid,
   GridItem,
   Divider,
+  Flex,
+  Icon,
+  Link as ChakraLink,
 } from '@chakra-ui/react';
 import { StarIcon, TimeIcon, PhoneIcon, EmailIcon } from '@chakra-ui/icons';
+import { FaBuilding, FaClock } from 'react-icons/fa';
+import { useNavigate, useParams, Link as RouterLink } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
 import AppointmentCard from './AppointmentCard';
 import WorkingHoursForm from './WorkingHoursForm';
@@ -30,17 +35,37 @@ const PhlebotomistDashboard = () => {
   });
   const [loading, setLoading] = useState(true);
   const [showWorkingHoursForm, setShowWorkingHoursForm] = useState(false);
+  const [companyInfo, setCompanyInfo] = useState(null);
   const toast = useToast();
+  const navigate = useNavigate();
+  const { id } = useParams();
+  const [patientDraws, setPatientDraws] = useState([]);
 
   useEffect(() => {
-    fetchAppointments();
-  }, []);
+    if (id) {
+      fetchCompanyInfo();
+      fetchAppointments();
+      fetchPatientDraws();
+    }
+    // eslint-disable-next-line
+  }, [id]);
+
+  const fetchCompanyInfo = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('phlebotomist_profiles')
+        .select('company_name, company_address, full_name, email, phone')
+        .eq('id', id)
+        .single();
+      if (error) throw error;
+      setCompanyInfo(data);
+    } catch (error) {
+      setCompanyInfo(null);
+    }
+  };
 
   const fetchAppointments = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
       const { data, error } = await supabase
         .from('appointments')
         .select(`
@@ -50,7 +75,7 @@ const PhlebotomistDashboard = () => {
             avatar_url
           )
         `)
-        .eq('phlebotomist_id', user.id)
+        .eq('phlebotomist_id', id)
         .order('appointment_date', { ascending: true });
 
       if (error) throw error;
@@ -88,6 +113,25 @@ const PhlebotomistDashboard = () => {
     }
   };
 
+  const fetchPatientDraws = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('upcoming_draws')
+        .select('*')
+        .eq('lab_id', id)
+        .order('created_at', { ascending: false });
+      if (!error) setPatientDraws(data || []);
+    } catch (error) {
+      toast({
+        title: 'Error fetching patient draws',
+        description: error.message,
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    }
+  };
+
   const handleAppointmentAction = async (appointmentId, action) => {
     try {
       const { error } = await supabase
@@ -116,19 +160,89 @@ const PhlebotomistDashboard = () => {
     }
   };
 
+  // Group draws by status
+  const upcomingNew = patientDraws.filter(draw => draw.status === 'new_request');
+  const upcoming = patientDraws.filter(draw => !draw.status || draw.status === 'upcoming');
+
   return (
-    <Box p={4}>
+    <Box p={2} maxW="600px" mx="auto">
+      {/* QLS Logo at the top */}
+      <Flex justify="center" align="center" mb={4} mt={2}>
+        <Image src="/qls-logo.png" alt="Quality Laboratory Service Logo" maxH="70px" mx="auto" mb={2} />
+      </Flex>
       <VStack spacing={6} align="stretch">
+        {/* Company Info at the top */}
+        {companyInfo && (
+          <Box bg="blue.50" borderRadius="lg" p={4} mb={2} boxShadow="sm">
+            <Flex align="center" justify="space-between" mb={2}>
+              <HStack>
+                <Icon as={FaBuilding} color="blue.500" boxSize={6} mr={2} />
+                <Text fontSize="xl" fontWeight="bold">
+                  {companyInfo.company_name || 'Mobile Lab'}
+                </Text>
+              </HStack>
+              <ChakraLink
+                as={RouterLink}
+                to={`/lab/${id}/working-hours`}
+                color="blue.600"
+                fontWeight="semibold"
+                fontSize="md"
+                display="flex"
+                alignItems="center"
+              >
+                <Icon as={FaClock} mr={1} /> Working Hours
+              </ChakraLink>
+            </Flex>
+            <Text color="gray.600" fontSize="md">{companyInfo.company_address}</Text>
+            <Text color="gray.500" fontSize="sm">Contact: {companyInfo.full_name} | {companyInfo.email} | {companyInfo.phone}</Text>
+          </Box>
+        )}
+        {/* Upcoming (new_request) and Upcoming (upcoming) sections */}
+        {upcomingNew.length > 0 && (
+          <Box mb={2} p={4} bg="yellow.50" borderRadius="md" boxShadow="sm">
+            <Text fontWeight="bold" mb={2}>Upcoming</Text>
+            <VStack align="start" spacing={2}>
+              {upcomingNew.map(draw => (
+                <HStack key={draw.id}>
+                  <Text>{draw.patient_email}</Text>
+                  <Button as="a" href={`/lab/${id}/patient/${encodeURIComponent(draw.patient_email)}`} size="sm" colorScheme="blue" target="_blank">Open Form</Button>
+                </HStack>
+              ))}
+            </VStack>
+          </Box>
+        )}
+        {upcoming.length > 0 && (
+          <Box mb={4} p={4} bg="blue.50" borderRadius="md" boxShadow="sm">
+            <Text fontWeight="bold" mb={2}>Upcoming (Not Started)</Text>
+            <VStack align="start" spacing={2}>
+              {upcoming.map(draw => (
+                <HStack key={draw.id}>
+                  <Text>{draw.patient_email}</Text>
+                  <Button as="a" href={`/lab/${id}/patient/${encodeURIComponent(draw.patient_email)}`} size="sm" colorScheme="blue" target="_blank">Open Form</Button>
+                </HStack>
+              ))}
+            </VStack>
+          </Box>
+        )}
+
+        {/* Large New Blood Draw button */}
+        <Button
+          colorScheme="blue"
+          size="lg"
+          width="100%"
+          fontSize="xl"
+          py={8}
+          borderRadius="xl"
+          boxShadow="md"
+          onClick={() => navigate(`/lab/${id}/new-blood-draw`)}
+        >
+          + New Blood Draw
+        </Button>
+
         <HStack justify="space-between">
           <Text fontSize="2xl" fontWeight="bold">
             Dashboard
           </Text>
-          <Button
-            colorScheme="blue"
-            onClick={() => setShowWorkingHoursForm(true)}
-          >
-            Set Working Hours
-          </Button>
         </HStack>
 
         <Tabs>
@@ -138,14 +252,6 @@ const PhlebotomistDashboard = () => {
               {appointments.new.length > 0 && (
                 <Badge ml={2} colorScheme="red">
                   {appointments.new.length}
-                </Badge>
-              )}
-            </Tab>
-            <Tab>
-              Upcoming
-              {appointments.upcoming.length > 0 && (
-                <Badge ml={2} colorScheme="blue">
-                  {appointments.upcoming.length}
                 </Badge>
               )}
             </Tab>
@@ -161,20 +267,6 @@ const PhlebotomistDashboard = () => {
                     appointment={appointment}
                     onAccept={() => handleAppointmentAction(appointment.id, 'accepted')}
                     onReject={() => handleAppointmentAction(appointment.id, 'rejected')}
-                  />
-                ))}
-              </VStack>
-            </TabPanel>
-
-            <TabPanel>
-              <VStack spacing={4} align="stretch">
-                {appointments.upcoming.map((appointment) => (
-                  <AppointmentCard
-                    key={appointment.id}
-                    appointment={appointment}
-                    onStatusChange={(status) =>
-                      handleAppointmentAction(appointment.id, status)
-                    }
                   />
                 ))}
               </VStack>

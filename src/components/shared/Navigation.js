@@ -2,45 +2,51 @@ import React from 'react';
 import {
   Box,
   Flex,
-  HStack,
-  Link,
-  IconButton,
-  useDisclosure,
-  useColorMode,
+  Button,
   Stack,
+  useColorModeValue,
+  useDisclosure,
+  IconButton,
+  HStack,
+  Link as ChakraLink,
 } from '@chakra-ui/react';
-import { HamburgerIcon, CloseIcon, MoonIcon, SunIcon } from '@chakra-ui/icons';
-import { Link as RouterLink } from 'react-router-dom';
+import { HamburgerIcon, CloseIcon } from '@chakra-ui/icons';
+import { Link as RouterLink, useLocation } from 'react-router-dom';
 
-const Navigation = () => {
+function Navigation({ userType = 'patient', labId }) {
   const { isOpen, onOpen, onClose } = useDisclosure();
-  const { colorMode, toggleColorMode } = useColorMode();
+  const location = useLocation();
+  const bgColor = useColorModeValue('white', 'gray.900');
+  const hoverBg = useColorModeValue('gray.200', 'gray.700');
 
-  const Links = [
-    { name: 'Home', path: '/' },
-    { name: 'Admin', path: '/admin' },
-    { name: 'Phlebotomists', path: '/phlebotomists' },
-    { name: 'Dashboard', path: '/dashboard' },
-  ];
+  // Dynamic links for phlebotomist
+  const phlebotomistLinks = labId
+    ? [
+        { name: 'Dashboard', path: `/lab/${labId}` },
+        { name: 'Working Hours', path: `/lab/${labId}/working-hours` },
+        { name: 'New Blood Draw', path: `/lab/${labId}/new-blood-draw` },
+      ]
+    : [
+        { name: 'Dashboard', path: '/lab' },
+        { name: 'Working Hours', path: '/lab/working-hours' },
+        { name: 'New Blood Draw', path: '/lab/new-blood-draw' },
+      ];
 
-  const NavLink = ({ children, to }) => (
-    <Link
-      as={RouterLink}
-      px={2}
-      py={1}
-      rounded={'md'}
-      _hover={{
-        textDecoration: 'none',
-        bg: 'gray.200',
-      }}
-      to={to}
-    >
-      {children}
-    </Link>
-  );
+  const Links = {
+    patient: [
+      { name: 'Home', path: '/patient' },
+      { name: 'Find Phlebotomist', path: '/patient' },
+    ],
+    phlebotomist: phlebotomistLinks,
+    admin: [
+      { name: 'Dashboard', path: '/admin' },
+      { name: 'Mobile Labs', path: '/admin/phlebotomists' },
+      { name: 'Submissions', path: '/admin/submissions' },
+    ],
+  };
 
   return (
-    <Box bg={colorMode === 'light' ? 'white' : 'gray.800'} px={4} boxShadow="sm">
+    <Box bg={bgColor} px={4} boxShadow="sm">
       <Flex h={16} alignItems={'center'} justifyContent={'space-between'}>
         <IconButton
           size={'md'}
@@ -50,38 +56,73 @@ const Navigation = () => {
           onClick={isOpen ? onClose : onOpen}
         />
         <HStack spacing={8} alignItems={'center'}>
-          <Box fontWeight="bold">Phlebotomy App</Box>
+          <Box>
+            <ChakraLink as={RouterLink} to="/" fontWeight="bold" fontSize="lg">
+              Phlebotomy App
+            </ChakraLink>
+          </Box>
           <HStack as={'nav'} spacing={4} display={{ base: 'none', md: 'flex' }}>
-            {Links.map((link) => (
-              <NavLink key={link.name} to={link.path}>
+            {Links[userType].map((link) => (
+              <ChakraLink
+                key={link.name}
+                as={RouterLink}
+                to={link.path}
+                px={2}
+                py={1}
+                rounded={'md'}
+                _hover={{
+                  textDecoration: 'none',
+                  bg: hoverBg,
+                }}
+                bg={location.pathname === link.path ? 'blue.500' : 'transparent'}
+                color={location.pathname === link.path ? 'white' : 'inherit'}
+              >
                 {link.name}
-              </NavLink>
+              </ChakraLink>
             ))}
           </HStack>
         </HStack>
         <Flex alignItems={'center'}>
-          <IconButton
-            icon={colorMode === 'light' ? <MoonIcon /> : <SunIcon />}
-            onClick={toggleColorMode}
-            variant="ghost"
-            aria-label="Toggle color mode"
-          />
+          <Stack direction={'row'} spacing={7}>
+            <Button
+              as={RouterLink}
+              to="/"
+              variant={'ghost'}
+              colorScheme="blue"
+              size="sm"
+            >
+              Back to Home
+            </Button>
+          </Stack>
         </Flex>
       </Flex>
 
       {isOpen ? (
         <Box pb={4} display={{ md: 'none' }}>
           <Stack as={'nav'} spacing={4}>
-            {Links.map((link) => (
-              <NavLink key={link.name} to={link.path}>
+            {Links[userType].map((link) => (
+              <ChakraLink
+                key={link.name}
+                as={RouterLink}
+                to={link.path}
+                px={2}
+                py={1}
+                rounded={'md'}
+                _hover={{
+                  textDecoration: 'none',
+                  bg: hoverBg,
+                }}
+                bg={location.pathname === link.path ? 'blue.500' : 'transparent'}
+                color={location.pathname === link.path ? 'white' : 'inherit'}
+              >
                 {link.name}
-              </NavLink>
+              </ChakraLink>
             ))}
           </Stack>
         </Box>
       ) : null}
     </Box>
   );
-};
+}
 
 export default Navigation; 

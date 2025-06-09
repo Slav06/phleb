@@ -17,6 +17,7 @@ import {
   Box,
   Divider,
 } from '@chakra-ui/react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
 
 const DAYS_OF_WEEK = [
@@ -39,23 +40,37 @@ const WorkingHoursForm = ({ onClose }) => {
   );
   const [loading, setLoading] = useState(false);
   const toast = useToast();
+  const navigate = useNavigate();
+  const { id } = useParams();
+
+  const handleClose = () => {
+    if (onClose) {
+      onClose();
+    } else if (id) {
+      navigate(`/lab/${id}`);
+    } else {
+      navigate(-1);
+    }
+  };
 
   useEffect(() => {
     fetchExistingHours();
+    // eslint-disable-next-line
   }, []);
 
   const fetchExistingHours = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
+      let phlebId = id;
+      if (!phlebId) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('Not authenticated');
+        phlebId = user.id;
+      }
       const { data, error } = await supabase
         .from('working_hours')
         .select('*')
-        .eq('phlebotomist_id', user.id);
-
+        .eq('phlebotomist_id', phlebId);
       if (error) throw error;
-
       if (data.length > 0) {
         setWorkingHours(data);
       }
@@ -84,37 +99,35 @@ const WorkingHoursForm = ({ onClose }) => {
     setLoading(true);
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
+      let phlebId = id;
+      if (!phlebId) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('Not authenticated');
+        phlebId = user.id;
+      }
       // Delete existing hours
       const { error: deleteError } = await supabase
         .from('working_hours')
         .delete()
-        .eq('phlebotomist_id', user.id);
-
+        .eq('phlebotomist_id', phlebId);
       if (deleteError) throw deleteError;
-
       // Insert new hours
       const { error: insertError } = await supabase
         .from('working_hours')
         .insert(
           workingHours.map((hours) => ({
             ...hours,
-            phlebotomist_id: user.id,
+            phlebotomist_id: phlebId,
           }))
         );
-
       if (insertError) throw insertError;
-
       toast({
         title: 'Working hours updated successfully',
         status: 'success',
         duration: 3000,
         isClosable: true,
       });
-
-      onClose();
+      handleClose();
     } catch (error) {
       toast({
         title: 'Error updating working hours',
@@ -129,11 +142,11 @@ const WorkingHoursForm = ({ onClose }) => {
   };
 
   return (
-    <Modal isOpen={true} onClose={onClose} size="xl">
+    <Modal isOpen={true} onClose={handleClose} size="xl">
       <ModalOverlay />
       <ModalContent>
         <ModalHeader>Set Working Hours</ModalHeader>
-        <ModalCloseButton />
+        <ModalCloseButton onClick={handleClose} />
         <ModalBody pb={6}>
           <form onSubmit={handleSubmit}>
             <VStack spacing={4}>

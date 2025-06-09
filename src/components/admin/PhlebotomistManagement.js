@@ -28,8 +28,9 @@ import {
   NumberInputStepper,
   NumberIncrementStepper,
   NumberDecrementStepper,
+  HStack,
 } from '@chakra-ui/react';
-import { EditIcon, DeleteIcon } from '@chakra-ui/icons';
+import { EditIcon, DeleteIcon, AddIcon, CopyIcon, CheckIcon } from '@chakra-ui/icons';
 import { supabase } from '../../supabaseClient';
 
 const PhlebotomistManagement = () => {
@@ -43,11 +44,14 @@ const PhlebotomistManagement = () => {
     full_name: '',
     email: '',
     phone: '',
-    hourly_rate: 0,
-    service_radius_miles: 10,
-    bio: '',
-    rating: 5,
+    company_name: '',
+    company_address: '',
+    min_draw_fee: '',
+    max_draw_fee: '',
+    service_areas: [{ zip_code: '', radius: 10 }],
   });
+
+  const [copiedId, setCopiedId] = useState(null);
 
   useEffect(() => {
     fetchPhlebotomists();
@@ -57,17 +61,11 @@ const PhlebotomistManagement = () => {
     try {
       const { data, error } = await supabase
         .from('phlebotomist_profiles')
-        .select(`
-          *,
-          profiles (
-            full_name,
-            email,
-            phone
-          )
-        `);
+        .select('*')
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setPhlebotomists(data);
+      setPhlebotomists(data || []);
     } catch (error) {
       toast({
         title: 'Error fetching phlebotomists',
@@ -96,96 +94,143 @@ const PhlebotomistManagement = () => {
     }));
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+
     try {
-      if (selectedPhlebotomist) {
-        // Update existing phlebotomist
-        const { error } = await supabase
+      // 1. Check if the email exists in profiles
+      const { data: existingUser, error: fetchError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', formData.email)
+        .single();
+
+      let userId;
+      if (existingUser) {
+        // 2. Update the phlebotomist profile
+        userId = existingUser.id;
+        const { error: updateError } = await supabase
           .from('phlebotomist_profiles')
           .update({
-            hourly_rate: formData.hourly_rate,
-            service_radius_miles: formData.service_radius_miles,
-            bio: formData.bio,
-            rating: formData.rating,
+            full_name: formData.full_name,
+            email: formData.email,
+            phone: formData.phone,
+            company_name: formData.company_name,
+            company_address: formData.company_address,
+            min_draw_fee: parseFloat(formData.min_draw_fee),
+            max_draw_fee: parseFloat(formData.max_draw_fee),
+            service_areas: formData.service_areas,
           })
-          .eq('id', selectedPhlebotomist.id);
-
-        if (error) throw error;
-
-        toast({
-          title: 'Phlebotomist updated successfully',
-          status: 'success',
-          duration: 3000,
-          isClosable: true,
-        });
+          .eq('id', userId);
+        if (updateError) throw updateError;
       } else {
-        // Create new phlebotomist
-        const { data: { user }, error: authError } = await supabase.auth.signUp({
+        // 3. Create the user profile
+        const { data: userData, error: userError } = await supabase.auth.signUp({
           email: formData.email,
           password: Math.random().toString(36).slice(-8), // Generate random password
         });
-
-        if (authError) throw authError;
-
-        const { error: profileError } = await supabase
+        if (userError) throw userError;
+        userId = userData.user.id;
+        // Insert into profiles table
+        const { error: profileInsertError } = await supabase
           .from('profiles')
           .insert([
             {
-              id: user.id,
+              id: userId,
               full_name: formData.full_name,
               email: formData.email,
-              phone: formData.phone,
               role: 'phlebotomist',
             },
           ]);
-
-        if (profileError) throw profileError;
-
-        const { error: phlebError } = await supabase
+        if (profileInsertError) throw profileInsertError;
+        // Create the phlebotomist profile
+        const { error: phlebProfileError } = await supabase
           .from('phlebotomist_profiles')
           .insert([
             {
-              id: user.id,
-              hourly_rate: formData.hourly_rate,
-              service_radius_miles: formData.service_radius_miles,
-              bio: formData.bio,
-              rating: formData.rating,
+              id: userId,
+              full_name: formData.full_name,
+              email: formData.email,
+              phone: formData.phone,
+              company_name: formData.company_name,
+              company_address: formData.company_address,
+              min_draw_fee: parseFloat(formData.min_draw_fee),
+              max_draw_fee: parseFloat(formData.max_draw_fee),
+              service_areas: formData.service_areas,
             },
           ]);
-
-        if (phlebError) throw phlebError;
-
-        toast({
-          title: 'Phlebotomist created successfully',
-          status: 'success',
-          duration: 3000,
-          isClosable: true,
-        });
+        if (phlebProfileError) throw phlebProfileError;
       }
+
+      toast({
+        title: 'Success',
+        description: 'Mobile Lab added or updated successfully',
+        status: 'success',
+        duration: 3000,
+        isClosable: true,
+      });
 
       onClose();
       fetchPhlebotomists();
+      resetForm();
     } catch (error) {
       toast({
-        title: 'Error saving phlebotomist',
+        title: 'Error',
         description: error.message,
         status: 'error',
         duration: 5000,
         isClosable: true,
       });
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      full_name: '',
+      email: '',
+      phone: '',
+      company_name: '',
+      company_address: '',
+      min_draw_fee: '',
+      max_draw_fee: '',
+      service_areas: [{ zip_code: '', radius: 10 }],
+    });
+  };
+
+  const addServiceArea = () => {
+    setFormData({
+      ...formData,
+      service_areas: [...formData.service_areas, { zip_code: '', radius: 10 }],
+    });
+  };
+
+  const removeServiceArea = (index) => {
+    setFormData({
+      ...formData,
+      service_areas: formData.service_areas.filter((_, i) => i !== index),
+    });
+  };
+
+  const updateServiceArea = (index, field, value) => {
+    const newServiceAreas = [...formData.service_areas];
+    newServiceAreas[index] = { ...newServiceAreas[index], [field]: value };
+    setFormData({ ...formData, service_areas: newServiceAreas });
   };
 
   const handleEdit = (phlebotomist) => {
     setSelectedPhlebotomist(phlebotomist);
     setFormData({
-      full_name: phlebotomist.profiles.full_name,
-      email: phlebotomist.profiles.email,
-      phone: phlebotomist.profiles.phone,
-      hourly_rate: phlebotomist.hourly_rate,
-      service_radius_miles: phlebotomist.service_radius_miles,
-      bio: phlebotomist.bio,
-      rating: phlebotomist.rating,
+      full_name: phlebotomist.full_name,
+      email: phlebotomist.email,
+      phone: phlebotomist.phone,
+      company_name: phlebotomist.company_name,
+      company_address: phlebotomist.company_address,
+      min_draw_fee: phlebotomist.min_draw_fee,
+      max_draw_fee: phlebotomist.max_draw_fee,
+      service_areas: phlebotomist.service_areas,
     });
     onOpen();
   };
@@ -222,55 +267,72 @@ const PhlebotomistManagement = () => {
 
   return (
     <Box p={4}>
-      <Button colorScheme="blue" mb={4} onClick={() => {
-        setSelectedPhlebotomist(null);
-        setFormData({
-          full_name: '',
-          email: '',
-          phone: '',
-          hourly_rate: 0,
-          service_radius_miles: 10,
-          bio: '',
-          rating: 5,
-        });
-        onOpen();
-      }}>
-        Add New Phlebotomist
+      <Button colorScheme="blue" mb={4} onClick={onOpen}>
+        Add New Mobile Lab
       </Button>
 
       <Table variant="simple">
         <Thead>
           <Tr>
             <Th>Name</Th>
+            <Th>Company</Th>
             <Th>Email</Th>
             <Th>Phone</Th>
-            <Th>Hourly Rate</Th>
-            <Th>Service Radius</Th>
-            <Th>Rating</Th>
+            <Th>Draw Fee Range</Th>
+            <Th>Service Areas</Th>
+            <Th>Portal Link</Th>
             <Th>Actions</Th>
           </Tr>
         </Thead>
         <Tbody>
-          {phlebotomists.map((phleb) => (
-            <Tr key={phleb.id}>
-              <Td>{phleb.profiles.full_name}</Td>
-              <Td>{phleb.profiles.email}</Td>
-              <Td>{phleb.profiles.phone}</Td>
-              <Td>${phleb.hourly_rate}/hr</Td>
-              <Td>{phleb.service_radius_miles} miles</Td>
-              <Td>{phleb.rating}</Td>
+          {phlebotomists.map((phlebotomist) => (
+            <Tr key={phlebotomist.id}>
+              <Td>{phlebotomist.full_name}</Td>
+              <Td>{phlebotomist.company_name}</Td>
+              <Td>{phlebotomist.email}</Td>
+              <Td>{phlebotomist.phone}</Td>
+              <Td>${phlebotomist.min_draw_fee} - ${phlebotomist.max_draw_fee}</Td>
+              <Td>
+                {phlebotomist.service_areas?.map((area, index) => (
+                  <Text key={index}>
+                    {area.zip_code} ({area.radius} miles)
+                  </Text>
+                ))}
+              </Td>
+              <Td>
+                <HStack>
+                  <a
+                    href={`/lab/${phlebotomist.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: '#3182ce', textDecoration: 'underline', fontSize: '0.9em' }}
+                  >
+                    /lab/{phlebotomist.id}
+                  </a>
+                  <IconButton
+                    size="sm"
+                    icon={copiedId === phlebotomist.id ? <CheckIcon /> : <CopyIcon />}
+                    aria-label="Copy link"
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/lab/${phlebotomist.id}`);
+                      setCopiedId(phlebotomist.id);
+                      setTimeout(() => setCopiedId(null), 1500);
+                    }}
+                  />
+                </HStack>
+              </Td>
               <Td>
                 <IconButton
                   icon={<EditIcon />}
                   mr={2}
-                  onClick={() => handleEdit(phleb)}
-                  aria-label="Edit phlebotomist"
+                  onClick={() => handleEdit(phlebotomist)}
+                  aria-label="Edit mobile lab"
                 />
                 <IconButton
                   icon={<DeleteIcon />}
                   colorScheme="red"
-                  onClick={() => handleDelete(phleb.id)}
-                  aria-label="Delete phlebotomist"
+                  onClick={() => handleDelete(phlebotomist.id)}
+                  aria-label="Delete mobile lab"
                 />
               </Td>
             </Tr>
@@ -278,112 +340,153 @@ const PhlebotomistManagement = () => {
         </Tbody>
       </Table>
 
-      <Modal isOpen={isOpen} onClose={onClose}>
+      <Modal isOpen={isOpen} onClose={onClose} size="xl">
         <ModalOverlay />
         <ModalContent>
           <ModalHeader>
-            {selectedPhlebotomist ? 'Edit Phlebotomist' : 'Add New Phlebotomist'}
+            {selectedPhlebotomist ? 'Edit Mobile Lab' : 'Add New Mobile Lab'}
           </ModalHeader>
           <ModalCloseButton />
           <ModalBody>
-            <VStack spacing={4}>
-              <FormControl isRequired>
-                <FormLabel>Full Name</FormLabel>
-                <Input
-                  name="full_name"
-                  value={formData.full_name}
-                  onChange={handleInputChange}
-                  isDisabled={!!selectedPhlebotomist}
-                />
-              </FormControl>
+            <form onSubmit={handleSubmit}>
+              <VStack spacing={4} pb={4}>
+                <FormControl isRequired>
+                  <FormLabel>Full Name</FormLabel>
+                  <Input
+                    name="full_name"
+                    value={formData.full_name}
+                    onChange={handleInputChange}
+                    isDisabled={!!selectedPhlebotomist}
+                  />
+                </FormControl>
 
-              <FormControl isRequired>
-                <FormLabel>Email</FormLabel>
-                <Input
-                  name="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={handleInputChange}
-                  isDisabled={!!selectedPhlebotomist}
-                />
-              </FormControl>
+                <FormControl isRequired>
+                  <FormLabel>Email</FormLabel>
+                  <Input
+                    name="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={handleInputChange}
+                    isDisabled={!!selectedPhlebotomist}
+                  />
+                </FormControl>
 
-              <FormControl isRequired>
-                <FormLabel>Phone</FormLabel>
-                <Input
-                  name="phone"
-                  value={formData.phone}
-                  onChange={handleInputChange}
-                  isDisabled={!!selectedPhlebotomist}
-                />
-              </FormControl>
+                <FormControl isRequired>
+                  <FormLabel>Phone</FormLabel>
+                  <Input
+                    name="phone"
+                    value={formData.phone}
+                    onChange={handleInputChange}
+                    isDisabled={!!selectedPhlebotomist}
+                  />
+                </FormControl>
 
-              <FormControl isRequired>
-                <FormLabel>Hourly Rate ($)</FormLabel>
-                <NumberInput
-                  value={formData.hourly_rate}
-                  onChange={(value) => handleNumberChange('hourly_rate', value)}
-                  min={0}
+                <FormControl isRequired>
+                  <FormLabel>Company Name</FormLabel>
+                  <Input
+                    name="company_name"
+                    value={formData.company_name}
+                    onChange={handleInputChange}
+                    isDisabled={!!selectedPhlebotomist}
+                  />
+                </FormControl>
+
+                <FormControl isRequired>
+                  <FormLabel>Company Address</FormLabel>
+                  <Input
+                    name="company_address"
+                    value={formData.company_address}
+                    onChange={handleInputChange}
+                    isDisabled={!!selectedPhlebotomist}
+                  />
+                </FormControl>
+
+                <FormControl isRequired>
+                  <FormLabel>Draw Fee Range</FormLabel>
+                  <HStack>
+                    <NumberInput min={0} precision={2}>
+                      <NumberInputField
+                        placeholder="Min Fee"
+                        name="min_draw_fee"
+                        value={formData.min_draw_fee}
+                        onChange={(value) => handleNumberChange('min_draw_fee', value)}
+                      />
+                      <NumberInputStepper>
+                        <NumberIncrementStepper />
+                        <NumberDecrementStepper />
+                      </NumberInputStepper>
+                    </NumberInput>
+                    <Text>to</Text>
+                    <NumberInput min={0} precision={2}>
+                      <NumberInputField
+                        placeholder="Max Fee"
+                        name="max_draw_fee"
+                        value={formData.max_draw_fee}
+                        onChange={(value) => handleNumberChange('max_draw_fee', value)}
+                      />
+                      <NumberInputStepper>
+                        <NumberIncrementStepper />
+                        <NumberDecrementStepper />
+                      </NumberInputStepper>
+                    </NumberInput>
+                  </HStack>
+                </FormControl>
+
+                <FormControl>
+                  <FormLabel>Service Areas</FormLabel>
+                  <VStack spacing={2} align="stretch">
+                    {formData.service_areas.map((area, index) => (
+                      <HStack key={index}>
+                        <Input
+                          placeholder="Zip Code"
+                          name="zip_code"
+                          value={area.zip_code}
+                          onChange={(e) => updateServiceArea(index, 'zip_code', e.target.value)}
+                        />
+                        <NumberInput
+                          min={1}
+                          max={100}
+                          value={area.radius}
+                          onChange={(value) => updateServiceArea(index, 'radius', parseInt(value))}
+                        >
+                          <NumberInputField placeholder="Radius" />
+                          <NumberInputStepper>
+                            <NumberIncrementStepper />
+                            <NumberDecrementStepper />
+                          </NumberInputStepper>
+                        </NumberInput>
+                        <Text>miles</Text>
+                        {index > 0 && (
+                          <IconButton
+                            icon={<DeleteIcon />}
+                            onClick={() => removeServiceArea(index)}
+                            aria-label="Remove service area"
+                          />
+                        )}
+                      </HStack>
+                    ))}
+                    <Button
+                      leftIcon={<AddIcon />}
+                      onClick={addServiceArea}
+                      size="sm"
+                      variant="outline"
+                    >
+                      Add Service Area
+                    </Button>
+                  </VStack>
+                </FormControl>
+
+                <Button
+                  type="submit"
+                  colorScheme="blue"
+                  isLoading={loading}
+                  width="full"
                 >
-                  <NumberInputField />
-                  <NumberInputStepper>
-                    <NumberIncrementStepper />
-                    <NumberDecrementStepper />
-                  </NumberInputStepper>
-                </NumberInput>
-              </FormControl>
-
-              <FormControl isRequired>
-                <FormLabel>Service Radius (miles)</FormLabel>
-                <NumberInput
-                  value={formData.service_radius_miles}
-                  onChange={(value) => handleNumberChange('service_radius_miles', value)}
-                  min={1}
-                >
-                  <NumberInputField />
-                  <NumberInputStepper>
-                    <NumberIncrementStepper />
-                    <NumberDecrementStepper />
-                  </NumberInputStepper>
-                </NumberInput>
-              </FormControl>
-
-              <FormControl>
-                <FormLabel>Bio</FormLabel>
-                <Input
-                  name="bio"
-                  value={formData.bio}
-                  onChange={handleInputChange}
-                />
-              </FormControl>
-
-              <FormControl isRequired>
-                <FormLabel>Rating</FormLabel>
-                <NumberInput
-                  value={formData.rating}
-                  onChange={(value) => handleNumberChange('rating', value)}
-                  min={0}
-                  max={5}
-                  step={0.1}
-                >
-                  <NumberInputField />
-                  <NumberInputStepper>
-                    <NumberIncrementStepper />
-                    <NumberDecrementStepper />
-                  </NumberInputStepper>
-                </NumberInput>
-              </FormControl>
-            </VStack>
+                  {selectedPhlebotomist ? 'Update' : 'Create'}
+                </Button>
+              </VStack>
+            </form>
           </ModalBody>
-
-          <ModalFooter>
-            <Button variant="ghost" mr={3} onClick={onClose}>
-              Cancel
-            </Button>
-            <Button colorScheme="blue" onClick={handleSubmit}>
-              {selectedPhlebotomist ? 'Update' : 'Create'}
-            </Button>
-          </ModalFooter>
         </ModalContent>
       </Modal>
     </Box>

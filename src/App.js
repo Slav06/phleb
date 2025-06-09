@@ -1,41 +1,67 @@
 import React from 'react';
-import { ChakraProvider, CSSReset, Box } from '@chakra-ui/react';
+import { ChakraProvider, CSSReset } from '@chakra-ui/react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from './supabaseClient';
 
-// Components
-import Navigation from './components/shared/Navigation';
-import BloodDrawForm from './BloodDrawForm';
-import AdminPanel from './AdminPanel';
+// Landing Page
+import LandingPage from './components/LandingPage';
+
+// Patient Routes
+import PatientLayout from './layouts/PatientLayout';
 import PhlebotomistList from './components/patient/PhlebotomistList';
 import PhlebotomistProfile from './components/patient/PhlebotomistProfile';
-import PhlebotomistDashboard from './components/phlebotomist/PhlebotomistDashboard';
-import ChatThread from './components/chat/ChatThread';
+import BookingForm from './components/patient/BookingForm';
 
-// Initialize Supabase client
-const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
-const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Phlebotomist Routes
+import PhlebotomistLayout from './layouts/PhlebotomistLayout';
+import PhlebotomistDashboard from './components/phlebotomist/PhlebotomistDashboard';
+import WorkingHoursForm from './components/phlebotomist/WorkingHoursForm';
+import BloodDrawForm from './BloodDrawForm';
+
+// Admin Routes
+import AdminLayout from './layouts/AdminLayout';
+import AdminDashboard from './components/admin/AdminDashboard';
+import PhlebotomistManagement from './components/admin/PhlebotomistManagement';
+import SubmissionsList from './components/admin/SubmissionsList';
+
+// Shared Components
+import Navigation from './components/shared/Navigation';
 
 function App() {
   return (
     <ChakraProvider>
       <CSSReset />
       <Router>
-        <Box minH="100vh" bg="gray.50">
-          <Navigation />
-          <Box p={4}>
-            <Routes>
-              <Route path="/" element={<BloodDrawForm />} />
-              <Route path="/admin" element={<AdminPanel />} />
-              <Route path="/phlebotomists" element={<PhlebotomistList />} />
-              <Route path="/phlebotomist/:id" element={<PhlebotomistProfile />} />
-              <Route path="/dashboard" element={<PhlebotomistDashboard />} />
-              <Route path="/chat/:threadId" element={<ChatThread />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </Box>
-        </Box>
+        <Routes>
+          {/* Landing Page */}
+          <Route path="/" element={<LandingPage />} />
+
+          {/* Patient Routes */}
+          <Route path="/patient/*" element={<PatientLayout />}>
+            <Route index element={<PhlebotomistList />} />
+            <Route path="phlebotomist/:id" element={<PhlebotomistProfile />} />
+            <Route path="book/:phlebotomistId" element={<BookingForm />} />
+          </Route>
+
+          {/* Phlebotomist Routes (scoped by lab id) */}
+          <Route path="/lab/:id/*" element={<PhlebotomistLayout />}> 
+            <Route index element={<PhlebotomistDashboard />} />
+            <Route path="new-blood-draw" element={<BloodDrawForm />} />
+            <Route path="working-hours" element={<WorkingHoursForm />} />
+            <Route path="patient" element={<BloodDrawForm isPatientMode={true} />} />
+            <Route path="patient/:patientEmail" element={<BloodDrawForm isPatientMode={true} />} />
+          </Route>
+
+          {/* Admin Routes */}
+          <Route path="/admin/*" element={<AdminLayout />}>
+            <Route index element={<AdminDashboard />} />
+            <Route path="phlebotomists" element={<PhlebotomistManagement />} />
+            <Route path="submissions" element={<SubmissionsList />} />
+          </Route>
+
+          {/* Catch all route */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
       </Router>
     </ChakraProvider>
   );
