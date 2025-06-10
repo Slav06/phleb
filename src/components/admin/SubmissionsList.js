@@ -18,7 +18,7 @@ import {
   InputGroup,
   InputLeftElement,
 } from '@chakra-ui/react';
-import { SearchIcon } from '@chakra-ui/icons';
+import { SearchIcon, AttachmentIcon } from '@chakra-ui/icons';
 import { supabase } from '../../supabaseClient';
 
 function SubmissionsList() {
@@ -84,6 +84,29 @@ function SubmissionsList() {
     }
   };
 
+  const handleFedexLabelUpload = async (submissionId, file) => {
+    if (!file) return;
+    const fileExt = file.name.split('.').pop();
+    const filePath = `fedex-labels/${submissionId}.${fileExt}`;
+    // Upload to Supabase Storage
+    const { error: uploadError } = await supabase.storage.from('fedex-labels').upload(filePath, file, { upsert: true });
+    if (uploadError) {
+      toast({ title: 'Upload failed', description: uploadError.message, status: 'error', duration: 5000, isClosable: true });
+      return;
+    }
+    // Get public URL
+    const { data: urlData } = supabase.storage.from('fedex-labels').getPublicUrl(filePath);
+    const labelUrl = urlData.publicUrl;
+    // Update submission record
+    const { error: updateError } = await supabase.from('submissions').update({ fedex_label_url: labelUrl }).eq('id', submissionId);
+    if (updateError) {
+      toast({ title: 'Error saving label URL', description: updateError.message, status: 'error', duration: 5000, isClosable: true });
+      return;
+    }
+    setSubmissions(submissions.map(sub => sub.id === submissionId ? { ...sub, fedex_label_url: labelUrl } : sub));
+    toast({ title: 'FedEx label uploaded', status: 'success', duration: 3000, isClosable: true });
+  };
+
   const getStatusColor = (status) => {
     switch (status) {
       case 'pending':
@@ -146,6 +169,7 @@ function SubmissionsList() {
             <Th>Patient</Th>
             <Th>Phlebotomist</Th>
             <Th>Status</Th>
+            <Th>FedEx Label</Th>
             <Th>Actions</Th>
           </Tr>
         </Thead>
@@ -167,6 +191,28 @@ function SubmissionsList() {
                 >
                   {submission.status}
                 </Badge>
+              </Td>
+              <Td>
+                {submission.fedex_label_url ? (
+                  <Button
+                    as="a"
+                    href={submission.fedex_label_url}
+                    target="_blank"
+                    leftIcon={<AttachmentIcon />}
+                    size="sm"
+                    colorScheme="blue"
+                    variant="outline"
+                  >
+                    View Label
+                  </Button>
+                ) : (
+                  <Input
+                    type="file"
+                    accept="application/pdf,image/*"
+                    size="sm"
+                    onChange={e => handleFedexLabelUpload(submission.id, e.target.files[0])}
+                  />
+                )}
               </Td>
               <Td>
                 <Select

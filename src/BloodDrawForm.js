@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { FaUser, FaStethoscope, FaVial, FaShieldAlt, FaTruck, FaChevronLeft, FaChevronRight, FaCloudUploadAlt, FaTimes, FaShareAlt } from 'react-icons/fa';
 import {
   Box,
@@ -27,11 +27,13 @@ import {
   Td,
   Th,
   Link,
+  Spinner,
 } from '@chakra-ui/react';
 import { Image as ChakraImage } from '@chakra-ui/react';
 import { supabase } from './supabaseClient';
 import { useParams, useLocation, Link as RouterLink, useSearchParams } from 'react-router-dom';
 import { analyzeImage } from './aiService'; // Import the AI service
+import { CheckCircleIcon, WarningIcon } from '@chakra-ui/icons';
 
 const initialState = {
   patientName: '',
@@ -209,6 +211,33 @@ const FloatingInput = ({ label, id, ...props }) => (
   </FormControl>
 );
 
+// Helper to map camelCase form fields to snake_case DB columns
+function mapFormToDb(form, labInfo) {
+  return {
+    patient_name: form.patientName || '',
+    patient_address: form.patientAddress || '',
+    patient_email: form.patientEmail || '',
+    patient_dob: form.patientDOB || '',
+    doctor_name: form.doctorName || '',
+    doctor_address: form.doctorAddress || '',
+    doctor_phone: form.doctorPhone || '',
+    doctor_fax: form.doctorFax || '',
+    doctor_email: form.doctorEmail || '',
+    lab_brand: form.labBrand || '',
+    blood_collection_time: form.bloodCollectionTime || '',
+    script_image: form.scriptImage || '',
+    insurance_card_image: form.insuranceCardImage || '',
+    insurance_company: form.insuranceCompany || '',
+    insurance_policy_number: form.insurancePolicyNumber || '',
+    need_fedex_label: form.needFedexLabel || false,
+    fedex_ship_from: form.fedexShipFrom || '',
+    stat_test: form.statTest || false,
+    special_instructions: form.specialInstructions || '',
+    phlebotomist_name: labInfo?.company_name || labInfo?.full_name || '',
+    phlebotomist_email: labInfo?.email || '',
+  };
+}
+
 export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
   const [form, setForm] = useState(initialState);
   const [loading, setLoading] = useState(false);
@@ -229,6 +258,10 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
   const [upcomingDraws, setUpcomingDraws] = useState([]);
   const [searchParams] = useSearchParams();
   const emailFromQuery = searchParams.get('email');
+  const [submissionId, setSubmissionId] = useState(null);
+  const isDraftCreated = useRef(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(null);
 
   useEffect(() => {
     if (id) {
@@ -251,12 +284,40 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
     }
   };
 
-  const handleChange = (e) => {
+  const handleChange = async (e) => {
     const { name, value, type, checked } = e.target;
-    if (type === 'checkbox') {
-      setForm((f) => ({ ...f, [name]: checked }));
-    } else {
-      setForm((f) => ({ ...f, [name]: value }));
+    const newForm = type === 'checkbox'
+      ? { ...form, [name]: checked }
+      : { ...form, [name]: value };
+    setForm(newForm);
+    setSaving(true);
+    setSaveError(null);
+    const dbData = { ...mapFormToDb(newForm, labInfo), status: 'in_progress', submitted_at: new Date().toISOString() };
+    try {
+      if (!submissionId && id) {
+        const { data, error } = await supabase.from('submissions').insert([dbData]).select('id').single();
+        if (!error && data && data.id) {
+          setSubmissionId(data.id);
+          isDraftCreated.current = true;
+        } else if (error) {
+          setSaveError(error.message);
+          console.log('Save error:', error.message);
+          alert('Save error: ' + error.message);
+        }
+      } else if (submissionId) {
+        const { error } = await supabase.from('submissions').update(dbData).eq('id', submissionId);
+        if (error) {
+          setSaveError(error.message);
+          console.log('Save error:', error.message);
+          alert('Save error: ' + error.message);
+        }
+      }
+      setSaving(false);
+    } catch (err) {
+      setSaveError(err.message);
+      console.log('Save error:', err.message);
+      alert('Save error: ' + err.message);
+      setSaving(false);
     }
   };
 
@@ -264,19 +325,22 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
     e.preventDefault();
     setLoading(true);
     try {
-      // Save to Supabase
-      const { error } = await supabase.from('submissions').insert([
-        {
-          ...form,
-          submitted_at: new Date().toISOString(),
-        },
-      ]);
-      if (error) throw error;
+      const dbData = { ...mapFormToDb(form, labInfo), status: 'pending', submitted_at: new Date().toISOString() };
+      // Update the draft submission if it exists, otherwise insert new
+      if (submissionId) {
+        const { error } = await supabase.from('submissions').update(dbData).eq('id', submissionId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('submissions').insert([dbData]);
+        if (error) throw error;
+      }
       setMessage({ type: 'success', text: 'Form submitted successfully!' });
       setForm(initialState);
       setScriptPreview(null);
       setInsurancePreview(null);
       setStep(0);
+      setSubmissionId(null);
+      isDraftCreated.current = false;
     } catch (err) {
       setMessage({ type: 'error', text: 'An error occurred. Please try again.' });
     } finally {
@@ -742,6 +806,28 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
     // eslint-disable-next-line
   }, [emailFromQuery]);
 
+  // Create draft submission as soon as patient email is entered
+  useEffect(() => {
+    const createDraftSubmission = async () => {
+      if (!isDraftCreated.current && form.patientEmail && id) {
+        const { data, error } = await supabase.from('submissions').insert([
+          {
+            patient_email: form.patientEmail,
+            lab_brand: form.labBrand || null,
+            status: 'in_progress',
+            submitted_at: new Date().toISOString(),
+          },
+        ]).select('id').single();
+        if (!error && data && data.id) {
+          setSubmissionId(data.id);
+          isDraftCreated.current = true;
+        }
+      }
+    };
+    createDraftSubmission();
+    // eslint-disable-next-line
+  }, [form.patientEmail, id]);
+
   return (
     <Box minH="100vh" bg="gray.50" color="gray.800" py={8}>
       <Container maxW="container.xl">
@@ -778,21 +864,60 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
                 </HStack>
               </Box>
             ) : (
-              <Box mb={4} p={4} bg="gray.100" borderRadius="md" boxShadow="sm">
-                <Text fontWeight="bold" mb={2}>Generate Patient Form Link</Text>
-                <HStack>
+              <Box
+                mb={8}
+                p={{ base: 4, md: 6 }}
+                bg="white"
+                borderRadius="2xl"
+                boxShadow="lg"
+                borderLeftWidth={6}
+                borderLeftColor="blue.400"
+                position="relative"
+                overflow="hidden"
+                _hover={{ boxShadow: '2xl' }}
+              >
+                <Icon
+                  as={FaShareAlt}
+                  color="blue.50"
+                  boxSize={32}
+                  position="absolute"
+                  top={-6}
+                  right={-6}
+                  opacity={0.15}
+                  zIndex={0}
+                  pointerEvents="none"
+                />
+                <Text fontWeight="bold" fontSize="2xl" color="blue.700" mb={1} zIndex={1} position="relative">
+                  Share Patient Blood Draw Form
+                </Text>
+                <Text fontSize="md" color="gray.600" mb={4} zIndex={1} position="relative">
+                  Use this tool to generate a unique link for your patient to complete their blood draw form online.<br/>
+                  <b>When to use:</b> Before a scheduled blood draw, send this link to your patient so they can enter their information and upload required documents in advance.<br/>
+                  <b>How to share:</b> Enter the patient's email below and click the share button. Copy the generated link and send it to your patient via email, text, or any secure messaging platform.
+                </Text>
+                <Box my={4}>
+                  <Box borderBottomWidth={1} borderColor="gray.200" />
+                </Box>
+                <HStack spacing={2} zIndex={1} position="relative">
                   <Input
                     placeholder="Enter patient email"
                     value={patientEmailForShare}
                     onChange={e => setPatientEmailForShare(e.target.value)}
-                    size="md"
-                    width="auto"
+                    size="lg"
+                    borderRadius="xl"
+                    boxShadow="sm"
+                    bg="gray.50"
+                    _focus={{ borderColor: 'blue.400', boxShadow: '0 0 0 2px #90cdf4' }}
                   />
                   <IconButton
                     icon={<FaShareAlt />}
                     colorScheme="blue"
                     aria-label="Share patient form"
                     isDisabled={!patientEmailForShare}
+                    size="lg"
+                    borderRadius="xl"
+                    boxShadow="sm"
+                    _hover={{ bg: 'blue.500' }}
                     onClick={async () => {
                       setShowShareLink(true);
                       const link = `${window.location.origin}/lab/${id}/patient/${encodeURIComponent(patientEmailForShare)}`;
@@ -808,19 +933,35 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
                   />
                 </HStack>
                 {showShareLink && patientEmailForShare && (
-                  <Box mt={2}>
-                    <Text fontSize="sm">Share this link with the patient:</Text>
+                  <Box mt={4} zIndex={1} position="relative">
+                    <Text fontSize="sm" color="gray.500" mb={1}>Share this link with the patient:</Text>
                     <HStack>
                       <Input
                         value={`${window.location.origin}/lab/${id}/patient/${encodeURIComponent(patientEmailForShare)}`}
                         isReadOnly
-                        size="sm"
+                        size="md"
+                        borderRadius="xl"
+                        bg="gray.50"
+                        boxShadow="sm"
                       />
-                      <Button size="sm" onClick={() => {
-                        navigator.clipboard.writeText(`${window.location.origin}/lab/${id}/patient/${encodeURIComponent(patientEmailForShare)}`);
-                        setCopied(true);
-                        setTimeout(() => setCopied(false), 1500);
-                      }}>{copied ? "Copied!" : "Copy"}</Button>
+                      <Button
+                        size="md"
+                        colorScheme={copied ? 'green' : 'blue'}
+                        borderRadius="xl"
+                        boxShadow="sm"
+                        onClick={() => {
+                          navigator.clipboard.writeText(`${window.location.origin}/lab/${id}/patient/${encodeURIComponent(patientEmailForShare)}`);
+                          setCopied(true);
+                          setTimeout(() => setCopied(false), 1500);
+                        }}
+                        transition="all 0.2s"
+                      >
+                        {copied ? (
+                          <Box as="span" animation="fadeIn 0.3s">Copied!</Box>
+                        ) : (
+                          'Copy'
+                        )}
+                      </Button>
                     </HStack>
                   </Box>
                 )}
@@ -839,6 +980,22 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
               );
             })}
           </HStack>
+          {/* Save indicator */}
+          <Box mb={2} minH="28px">
+            {saving ? (
+              <HStack color="blue.500" fontWeight="medium" fontSize="sm">
+                <Spinner size="xs" /> Saving...
+              </HStack>
+            ) : saveError ? (
+              <HStack color="red.500" fontWeight="medium" fontSize="sm">
+                <WarningIcon boxSize={4} /> Error saving: {saveError}
+              </HStack>
+            ) : submissionId ? (
+              <HStack color="green.500" fontWeight="medium" fontSize="sm">
+                <CheckCircleIcon boxSize={4} /> Saved
+              </HStack>
+            ) : null}
+          </Box>
           <Box
             bg="gray.800"
             p={8}

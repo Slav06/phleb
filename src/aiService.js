@@ -1,20 +1,19 @@
+import Tesseract from 'tesseract.js';
+
 // Placeholder for AI image analysis
 export const analyzeImage = async (base64Image, type) => {
-  // Simulate AI analysis
-  console.log(`Analyzing ${type} image...`);
-  // Return mock data for now
-  return {
-    patientName: 'John Doe',
-    patientAddress: '123 Main St',
-    patientEmail: 'john.doe@example.com',
-    patientDOB: '1990-01-01',
-    doctorName: 'Dr. Smith',
-    doctorAddress: '456 Oak St',
-    doctorPhone: '555-123-4567',
-    doctorFax: '555-987-6543',
-    doctorEmail: 'dr.smith@example.com',
-    labBrand: 'Quest',
-    bloodCollectionTime: '2023-10-01T10:00',
-    specialInstructions: 'None',
-  };
+  // Convert base64 to blob
+  const byteString = atob(base64Image);
+  const ab = new ArrayBuffer(byteString.length);
+  const ia = new Uint8Array(ab);
+  for (let i = 0; i < byteString.length; i++) {
+    ia[i] = byteString.charCodeAt(i);
+  }
+  const blob = new Blob([ab], { type: 'image/png' });
+
+  // Run Tesseract OCR
+  const { data: { text } } = await Tesseract.recognize(blob, 'eng');
+
+  // For now, just return the raw text. You can later parse it to fill fields.
+  return { ocrText: text };
 }; 
