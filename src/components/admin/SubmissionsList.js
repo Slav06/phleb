@@ -17,9 +17,13 @@ import {
   Input,
   InputGroup,
   InputLeftElement,
+  Alert,
+  AlertIcon,
+  CloseButton,
 } from '@chakra-ui/react';
 import { SearchIcon, AttachmentIcon } from '@chakra-ui/icons';
 import { supabase } from '../../supabaseClient';
+import { Link as RouterLink } from 'react-router-dom';
 
 function SubmissionsList() {
   const [submissions, setSubmissions] = useState([]);
@@ -27,6 +31,7 @@ function SubmissionsList() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const toast = useToast();
+  const [dismissedAlerts, setDismissedAlerts] = useState([]);
 
   useEffect(() => {
     fetchSubmissions();
@@ -107,6 +112,29 @@ function SubmissionsList() {
     toast({ title: 'FedEx label uploaded', status: 'success', duration: 3000, isClosable: true });
   };
 
+  const handleLabResultsUpload = async (submissionId, file) => {
+    if (!file) return;
+    const fileExt = file.name.split('.').pop();
+    const filePath = `lab-results/${submissionId}.${fileExt}`;
+    // Upload to Supabase Storage
+    const { error: uploadError } = await supabase.storage.from('lab-results').upload(filePath, file, { upsert: true });
+    if (uploadError) {
+      toast({ title: 'Upload failed', description: uploadError.message, status: 'error', duration: 5000, isClosable: true });
+      return;
+    }
+    // Get public URL
+    const { data: urlData } = supabase.storage.from('lab-results').getPublicUrl(filePath);
+    const resultsUrl = urlData.publicUrl;
+    // Update submission record
+    const { error: updateError } = await supabase.from('submissions').update({ lab_results_url: resultsUrl }).eq('id', submissionId);
+    if (updateError) {
+      toast({ title: 'Error saving lab results URL', description: updateError.message, status: 'error', duration: 5000, isClosable: true });
+      return;
+    }
+    setSubmissions(submissions.map(sub => sub.id === submissionId ? { ...sub, lab_results_url: resultsUrl } : sub));
+    toast({ title: 'Lab results uploaded', status: 'success', duration: 3000, isClosable: true });
+  };
+
   const getStatusColor = (status) => {
     switch (status) {
       case 'pending':
@@ -130,6 +158,8 @@ function SubmissionsList() {
     return matchesSearch && matchesStatus;
   });
 
+  const waitingForFedex = submissions.filter(sub => sub.need_fedex_label && !sub.fedex_label_url);
+
   if (loading) {
     return <Text>Loading submissions...</Text>;
   }
@@ -137,6 +167,20 @@ function SubmissionsList() {
   return (
     <Box>
       <Heading mb={6}>Submissions</Heading>
+
+      {waitingForFedex.length > 0 && (
+        <Box mb={4}>
+          {waitingForFedex.map(sub => (
+            dismissedAlerts.includes(sub.id) ? null : (
+              <Alert status="warning" mb={2} key={sub.id} borderRadius="md">
+                <AlertIcon />
+                FedEx label needed for <b>{sub.patient_name || 'Unknown Patient'}</b> (submitted {sub.submitted_at ? new Date(sub.submitted_at).toLocaleDateString() : 'N/A'})
+                <CloseButton ml="auto" onClick={() => setDismissedAlerts([...dismissedAlerts, sub.id])} />
+              </Alert>
+            )
+          ))}
+        </Box>
+      )}
 
       <HStack spacing={4} mb={6}>
         <InputGroup maxW="400px">
@@ -166,10 +210,12 @@ function SubmissionsList() {
         <Thead>
           <Tr>
             <Th>Date</Th>
+            <Th>Draw ID</Th>
             <Th>Patient</Th>
             <Th>Phlebotomist</Th>
             <Th>Status</Th>
             <Th>FedEx Label</Th>
+            <Th>Lab Results</Th>
             <Th>Actions</Th>
           </Tr>
         </Thead>
@@ -177,6 +223,7 @@ function SubmissionsList() {
           {filteredSubmissions.map((submission) => (
             <Tr key={submission.id}>
               <Td>{new Date(submission.submitted_at).toLocaleDateString()}</Td>
+              <Td>{submission.id}</Td>
               <Td>{submission.patient_name || 'N/A'}</Td>
               <Td>{submission.phlebotomist_name || 'N/A'}</Td>
               <Td>
@@ -215,6 +262,28 @@ function SubmissionsList() {
                 )}
               </Td>
               <Td>
+                {submission.lab_results_url ? (
+                  <Button
+                    as="a"
+                    href={submission.lab_results_url}
+                    target="_blank"
+                    leftIcon={<AttachmentIcon />}
+                    size="sm"
+                    colorScheme="green"
+                    variant="outline"
+                  >
+                    Download Results
+                  </Button>
+                ) : (
+                  <Input
+                    type="file"
+                    accept="application/pdf,image/*"
+                    size="sm"
+                    onChange={e => handleLabResultsUpload(submission.id, e.target.files[0])}
+                  />
+                )}
+              </Td>
+              <Td>
                 <Select
                   value={submission.status}
                   onChange={(e) => handleStatusChange(submission.id, e.target.value)}
@@ -225,6 +294,9 @@ function SubmissionsList() {
                   <option value="completed">Completed</option>
                   <option value="cancelled">Cancelled</option>
                 </Select>
+              </Td>
+              <Td>
+                <Button as={RouterLink} to={`/admin/submissions/${submission.id}`} colorScheme="blue" size="sm">Edit/View</Button>
               </Td>
             </Tr>
           ))}

@@ -34,6 +34,7 @@ import { supabase } from './supabaseClient';
 import { useParams, useLocation, Link as RouterLink, useSearchParams } from 'react-router-dom';
 import { analyzeImage } from './aiService'; // Import the AI service
 import { CheckCircleIcon, WarningIcon } from '@chakra-ui/icons';
+import { useNavigate } from 'react-router-dom';
 
 const initialState = {
   patientName: '',
@@ -212,7 +213,7 @@ const FloatingInput = ({ label, id, ...props }) => (
 );
 
 // Helper to map camelCase form fields to snake_case DB columns
-function mapFormToDb(form, labInfo) {
+function mapFormToDb(form, labInfo, labId) {
   return {
     patient_name: form.patientName || '',
     patient_address: form.patientAddress || '',
@@ -235,6 +236,7 @@ function mapFormToDb(form, labInfo) {
     special_instructions: form.specialInstructions || '',
     phlebotomist_name: labInfo?.company_name || labInfo?.full_name || '',
     phlebotomist_email: labInfo?.email || '',
+    phlebotomist_id: labId,
   };
 }
 
@@ -262,6 +264,7 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
   const isDraftCreated = useRef(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (id) {
@@ -292,7 +295,7 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
     setForm(newForm);
     setSaving(true);
     setSaveError(null);
-    const dbData = { ...mapFormToDb(newForm, labInfo), status: 'in_progress', submitted_at: new Date().toISOString() };
+    const dbData = { ...mapFormToDb(newForm, labInfo, id), status: 'in_progress', submitted_at: new Date().toISOString() };
     try {
       if (!submissionId && id) {
         const { data, error } = await supabase.from('submissions').insert([dbData]).select('id').single();
@@ -325,7 +328,7 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
     e.preventDefault();
     setLoading(true);
     try {
-      const dbData = { ...mapFormToDb(form, labInfo), status: 'pending', submitted_at: new Date().toISOString() };
+      const dbData = { ...mapFormToDb(form, labInfo, id), status: 'pending', submitted_at: new Date().toISOString() };
       // Update the draft submission if it exists, otherwise insert new
       if (submissionId) {
         const { error } = await supabase.from('submissions').update(dbData).eq('id', submissionId);
@@ -341,6 +344,9 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
       setStep(0);
       setSubmissionId(null);
       isDraftCreated.current = false;
+      setTimeout(() => {
+        navigate(`/lab/${id}/summary/${submissionId}`);
+      }, 1000);
     } catch (err) {
       setMessage({ type: 'error', text: 'An error occurred. Please try again.' });
     } finally {
@@ -601,11 +607,11 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
         return (
           <VStack spacing={8} align="stretch">
             <Box>
-              <Text mb={4} fontSize="lg" fontWeight="medium" color="blue.400">
-                Delivery Information
+              <Text mb={2} fontSize="xl" fontWeight="bold" color="blue.700">
+                Request a New Fedex Label for your draw
               </Text>
-              <Text mb={4} color="gray.300">
-                Please provide the delivery information below. All fields are optional.
+              <Text mb={4} color="gray.600">
+                Please choose a SHIP FROM address from this list below or add a new one
               </Text>
               <Grid templateColumns={'1fr'} gap={6}>
                 <GridItem>
@@ -677,7 +683,6 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
                     <Table variant="simple">
                       <Thead>
                         <Tr>
-                          <Th>Request ID</Th>
                           <Th>Date</Th>
                           <Th>Status</Th>
                           <Th>Label</Th>
@@ -686,11 +691,14 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
                       <Tbody>
                         {pastRequests.map((request) => (
                           <Tr key={request.id}>
-                            <Td>{request.id}</Td>
                             <Td>{request.date}</Td>
                             <Td>{request.status}</Td>
                             <Td>
-                              <Button size="sm" colorScheme="blue" as="a" href={request.labelUrl} target="_blank">Download</Button>
+                              {request.labelUrl && !request.labelUrl.includes('example.com') ? (
+                                <Button size="sm" colorScheme="blue" as="a" href={request.labelUrl} target="_blank">Download</Button>
+                              ) : (
+                                <Text color="gray.500" fontSize="sm">Label not uploaded yet. Please check back soon.</Text>
+                              )}
                             </Td>
                           </Tr>
                         ))}
@@ -711,6 +719,14 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
   const progress = ((step + 1) / steps.length) * 100;
 
   // Step navigation
+  const handleNext = async (e) => {
+    if (step < 2) {
+      setStep((s) => Math.min(2, s + 1));
+    } else {
+      await handleSubmit(e);
+    }
+  };
+
   const renderStepNavigation = () => {
     return (
       <Flex justify="space-between" mt={8}>
@@ -725,11 +741,11 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
         </Button>
         <Button
           rightIcon={<FaChevronRight />}
-          onClick={() => setStep((s) => Math.min(2, s + 1))}
-          isDisabled={step === 2}
+          onClick={handleNext}
           colorScheme="blue"
+          type={step === 2 ? 'submit' : 'button'}
         >
-          Next
+          {step === 2 ? 'Complete' : 'Next'}
         </Button>
       </Flex>
     );
@@ -997,7 +1013,7 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
             ) : null}
           </Box>
           <Box
-            bg="gray.800"
+            bg="white"
             p={8}
             borderRadius="xl"
             boxShadow="xl"

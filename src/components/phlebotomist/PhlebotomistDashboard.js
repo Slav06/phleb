@@ -19,6 +19,17 @@ import {
   Flex,
   Icon,
   Link as ChakraLink,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  useDisclosure,
+  FormControl,
+  FormLabel,
+  Input,
+  Textarea,
 } from '@chakra-ui/react';
 import { StarIcon, TimeIcon, PhoneIcon, EmailIcon } from '@chakra-ui/icons';
 import { FaBuilding, FaClock } from 'react-icons/fa';
@@ -26,6 +37,8 @@ import { useNavigate, useParams, Link as RouterLink } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
 import AppointmentCard from './AppointmentCard';
 import WorkingHoursForm from './WorkingHoursForm';
+import SignatureCanvas from 'react-signature-canvas';
+import jsPDF from 'jspdf';
 
 const PhlebotomistDashboard = () => {
   const [appointments, setAppointments] = useState({
@@ -40,15 +53,27 @@ const PhlebotomistDashboard = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const [patientDraws, setPatientDraws] = useState([]);
+  const [pastSubmissions, setPastSubmissions] = useState([]);
+  const { isOpen, onOpen, onClose } = useDisclosure();
+  const [sigPad, setSigPad] = useState(null);
+  const [companyName, setCompanyName] = useState('');
+  const [printedName, setPrintedName] = useState('');
+  const [title, setTitle] = useState('');
+  const [signDate, setSignDate] = useState('');
+  const [agreementSigned, setAgreementSigned] = useState(false);
 
   useEffect(() => {
     if (id) {
       fetchCompanyInfo();
       fetchAppointments();
       fetchPatientDraws();
+      fetchPastSubmissions();
+    }
+    if (typeof window !== 'undefined' && localStorage.getItem('agreement_signed') !== 'true') {
+      navigate(`/lab/${id}/agreement`);
     }
     // eslint-disable-next-line
-  }, [id]);
+  }, [id, navigate]);
 
   const fetchCompanyInfo = async () => {
     try {
@@ -132,6 +157,15 @@ const PhlebotomistDashboard = () => {
     }
   };
 
+  const fetchPastSubmissions = async () => {
+    const { data, error } = await supabase
+      .from('submissions')
+      .select('*')
+      .eq('phlebotomist_id', id)
+      .order('submitted_at', { ascending: false });
+    if (!error) setPastSubmissions(data || []);
+  };
+
   const handleAppointmentAction = async (appointmentId, action) => {
     try {
       const { error } = await supabase
@@ -160,9 +194,15 @@ const PhlebotomistDashboard = () => {
     }
   };
 
+  const handleDeleteSubmission = async (submissionId) => {
+    if (!window.confirm('Are you sure you want to delete this incomplete draw?')) return;
+    const { error } = await supabase.from('submissions').delete().eq('id', submissionId);
+    if (!error) setPastSubmissions(pastSubmissions.filter(s => s.id !== submissionId));
+  };
+
   // Group draws by status
   const newRequests = patientDraws.filter(draw => draw.status === 'new_request');
-  const upcoming = patientDraws.filter(draw => !draw.status || draw.status === 'upcoming');
+  const upcoming = patientDraws.filter(draw => !draw.status || draw.status === 'upcoming' || draw.status === 'new_request');
 
   return (
     <Box p={2} maxW="600px" mx="auto">
@@ -242,6 +282,26 @@ const PhlebotomistDashboard = () => {
                     appointment={appointment}
                     readOnly
                   />
+                ))}
+                {/* Show past submissions summary links */}
+                {pastSubmissions.map((submission) => (
+                  <Box key={submission.id} p={4} borderWidth="1px" borderRadius="md" bg="gray.50">
+                    <HStack justify="space-between">
+                      <VStack align="start" spacing={0}>
+                        <Text fontWeight="bold">{submission.patient_name || 'Unknown Patient'}</Text>
+                        <Text fontSize="sm" color="gray.500">Submitted: {submission.submitted_at ? new Date(submission.submitted_at).toLocaleDateString() : 'N/A'}</Text>
+                        {submission.status !== 'completed' && (
+                          <Text color="orange.500" fontWeight="semibold">Incomplete</Text>
+                        )}
+                      </VStack>
+                      <HStack>
+                        <Button as={RouterLink} to={`/lab/${id}/summary/${submission.id}`} colorScheme="blue" size="sm">View Summary</Button>
+                        {submission.status !== 'completed' && (
+                          <Button colorScheme="red" size="sm" variant="outline" onClick={() => handleDeleteSubmission(submission.id)}>Delete</Button>
+                        )}
+                      </HStack>
+                    </HStack>
+                  </Box>
                 ))}
               </VStack>
             </TabPanel>

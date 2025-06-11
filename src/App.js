@@ -17,12 +17,15 @@ import PhlebotomistLayout from './layouts/PhlebotomistLayout';
 import PhlebotomistDashboard from './components/phlebotomist/PhlebotomistDashboard';
 import WorkingHoursForm from './components/phlebotomist/WorkingHoursForm';
 import BloodDrawForm from './BloodDrawForm';
+import LabDrawSummary from './components/phlebotomist/LabDrawSummary';
+import AgreementSign from './components/phlebotomist/AgreementSign';
 
 // Admin Routes
 import AdminLayout from './layouts/AdminLayout';
 import AdminDashboard from './components/admin/AdminDashboard';
 import PhlebotomistManagement from './components/admin/PhlebotomistManagement';
 import SubmissionsList from './components/admin/SubmissionsList';
+import SubmissionDetail from './components/admin/SubmissionDetail';
 
 // Shared Components
 import Navigation from './components/shared/Navigation';
@@ -50,6 +53,8 @@ function App() {
             <Route path="working-hours" element={<WorkingHoursForm />} />
             <Route path="patient" element={<BloodDrawForm isPatientMode={true} />} />
             <Route path="patient/:patientEmail" element={<BloodDrawForm isPatientMode={true} />} />
+            <Route path="summary/:submissionId" element={<LabDrawSummary />} />
+            <Route path="agreement" element={<AgreementSign />} />
           </Route>
 
           {/* Admin Routes */}
@@ -57,6 +62,7 @@ function App() {
             <Route index element={<AdminDashboard />} />
             <Route path="phlebotomists" element={<PhlebotomistManagement />} />
             <Route path="submissions" element={<SubmissionsList />} />
+            <Route path="submissions/:id" element={<SubmissionDetail />} />
           </Route>
 
           {/* Catch all route */}
