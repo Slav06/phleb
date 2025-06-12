@@ -165,68 +165,30 @@ function SubmissionsList() {
   }
 
   return (
-    <Box>
-      <Heading mb={6}>Submissions</Heading>
-
-      {waitingForFedex.length > 0 && (
-        <Box mb={4}>
-          {waitingForFedex.map(sub => (
-            dismissedAlerts.includes(sub.id) ? null : (
-              <Alert status="warning" mb={2} key={sub.id} borderRadius="md">
-                <AlertIcon />
-                FedEx label needed for <b>{sub.patient_name || 'Unknown Patient'}</b> (submitted {sub.submitted_at ? new Date(sub.submitted_at).toLocaleDateString() : 'N/A'})
-                <CloseButton ml="auto" onClick={() => setDismissedAlerts([...dismissedAlerts, sub.id])} />
-              </Alert>
-            )
-          ))}
-        </Box>
-      )}
-
-      <HStack spacing={4} mb={6}>
-        <InputGroup maxW="400px">
-          <InputLeftElement pointerEvents="none">
-            <SearchIcon color="gray.300" />
-          </InputLeftElement>
-          <Input
-            placeholder="Search by patient or phlebotomist name"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </InputGroup>
-
-        <Select
-          maxW="200px"
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-        >
-          <option value="all">All Status</option>
-          <option value="pending">Pending</option>
-          <option value="completed">Completed</option>
-          <option value="cancelled">Cancelled</option>
-        </Select>
-      </HStack>
-
-      <Table variant="simple">
+    <Box w="100vw" maxW="100vw" px={0} py={2} overflowX="auto" bg="white">
+      <Heading mb={4} size="md" textAlign="left">Submissions</Heading>
+      <Table variant="unstyled" size="sm" width="100%" style={{ tableLayout: 'auto', borderCollapse: 'collapse' }}>
         <Thead>
           <Tr>
-            <Th>Date</Th>
-            <Th>Draw ID</Th>
-            <Th>Patient</Th>
-            <Th>Phlebotomist</Th>
-            <Th>Status</Th>
-            <Th>FedEx Label</Th>
-            <Th>Lab Results</Th>
-            <Th>Actions</Th>
+            <Th fontSize="2xl" fontWeight="bold" py={0.5} px={2} border="1px solid #e0e0e0" bg="white">Date</Th>
+            <Th fontSize="2xl" fontWeight="bold" py={0.5} px={2} border="1px solid #e0e0e0" bg="white">Draw ID</Th>
+            <Th fontSize="2xl" fontWeight="bold" py={0.5} px={2} border="1px solid #e0e0e0" bg="white">Patient</Th>
+            <Th fontSize="2xl" fontWeight="bold" py={0.5} px={2} border="1px solid #e0e0e0" bg="white">Phlebotomist</Th>
+            <Th fontSize="2xl" fontWeight="bold" py={0.5} px={2} border="1px solid #e0e0e0" bg="white">Status</Th>
+            <Th fontSize="2xl" fontWeight="bold" py={0.5} px={2} border="1px solid #e0e0e0" bg="white">FedEx Label</Th>
+            <Th fontSize="2xl" fontWeight="bold" py={0.5} px={2} border="1px solid #e0e0e0" bg="white">Lab Results</Th>
+            <Th fontSize="2xl" fontWeight="bold" py={0.5} px={2} border="1px solid #e0e0e0" bg="white">Deleted By Lab</Th>
+            <Th fontSize="2xl" fontWeight="bold" py={0.5} px={2} border="1px solid #e0e0e0" bg="white">Actions</Th>
           </Tr>
         </Thead>
         <Tbody>
           {filteredSubmissions.map((submission) => (
             <Tr key={submission.id}>
-              <Td>{new Date(submission.submitted_at).toLocaleDateString()}</Td>
-              <Td>{submission.id}</Td>
-              <Td>{submission.patient_name || 'N/A'}</Td>
-              <Td>{submission.phlebotomist_name || 'N/A'}</Td>
-              <Td>
+              <Td fontSize="xl" fontWeight="bold" py={0.5} px={2} border="1px solid #e0e0e0" bg="white">{new Date(submission.submitted_at).toLocaleDateString()}</Td>
+              <Td fontSize="xl" fontWeight="bold" py={0.5} px={2} border="1px solid #e0e0e0" bg="white">{submission.id}</Td>
+              <Td fontSize="xl" fontWeight="bold" py={0.5} px={2} border="1px solid #e0e0e0" bg="white">{submission.patient_name || 'N/A'}</Td>
+              <Td fontSize="xl" fontWeight="bold" py={0.5} px={2} border="1px solid #e0e0e0" bg="white">{submission.phlebotomist_name || 'N/A'}</Td>
+              <Td fontSize="xl" fontWeight="bold" py={0.5} px={2} border="1px solid #e0e0e0" bg="white">
                 <Badge
                   colorScheme={
                     submission.status === 'completed'
@@ -235,68 +197,87 @@ function SubmissionsList() {
                       ? 'red'
                       : 'yellow'
                   }
+                  fontSize="xl"
+                  px={2}
+                  py={0.5}
+                  fontWeight="bold"
                 >
                   {submission.status}
                 </Badge>
               </Td>
-              <Td>
+              <Td fontSize="xl" fontWeight="bold" py={0.5} px={2} border="1px solid #e0e0e0" bg="white">
                 {submission.fedex_label_url ? (
                   <Button
                     as="a"
                     href={submission.fedex_label_url}
                     target="_blank"
                     leftIcon={<AttachmentIcon />}
-                    size="sm"
+                    size="md"
                     colorScheme="blue"
                     variant="outline"
+                    px={2}
+                    py={0.5}
+                    fontWeight="bold"
                   >
-                    View Label
+                    View
                   </Button>
                 ) : (
                   <Input
                     type="file"
                     accept="application/pdf,image/*"
-                    size="sm"
+                    size="md"
+                    py={0.5}
+                    fontWeight="bold"
                     onChange={e => handleFedexLabelUpload(submission.id, e.target.files[0])}
                   />
                 )}
               </Td>
-              <Td>
+              <Td fontSize="xl" fontWeight="bold" py={0.5} px={2} border="1px solid #e0e0e0" bg="white">
                 {submission.lab_results_url ? (
                   <Button
                     as="a"
                     href={submission.lab_results_url}
                     target="_blank"
                     leftIcon={<AttachmentIcon />}
-                    size="sm"
+                    size="md"
                     colorScheme="green"
                     variant="outline"
+                    px={2}
+                    py={0.5}
+                    fontWeight="bold"
                   >
-                    Download Results
+                    Download
                   </Button>
                 ) : (
                   <Input
                     type="file"
                     accept="application/pdf,image/*"
-                    size="sm"
+                    size="md"
+                    py={0.5}
+                    fontWeight="bold"
                     onChange={e => handleLabResultsUpload(submission.id, e.target.files[0])}
                   />
                 )}
               </Td>
-              <Td>
+              <Td fontSize="xl" fontWeight="bold" py={0.5} px={2} border="1px solid #e0e0e0" bg="white">
+                {submission.deleted_by_lab ? (
+                  <Badge colorScheme="red" fontSize="xl" px={2} py={0.5} fontWeight="bold">Deleted by Lab</Badge>
+                ) : ''}
+              </Td>
+              <Td fontSize="xl" fontWeight="bold" py={0.5} px={2} border="1px solid #e0e0e0" bg="white">
                 <Select
                   value={submission.status}
                   onChange={(e) => handleStatusChange(submission.id, e.target.value)}
-                  size="sm"
-                  maxW="150px"
+                  size="md"
+                  maxW="120px"
+                  py={0.5}
+                  fontWeight="bold"
                 >
                   <option value="pending">Pending</option>
                   <option value="completed">Completed</option>
                   <option value="cancelled">Cancelled</option>
                 </Select>
-              </Td>
-              <Td>
-                <Button as={RouterLink} to={`/admin/submissions/${submission.id}`} colorScheme="blue" size="sm">Edit/View</Button>
+                <Button as={RouterLink} to={`/admin/submissions/${submission.id}`} colorScheme="blue" size="md" ml={2} px={2} py={0.5} fontWeight="bold">Edit/View</Button>
               </Td>
             </Tr>
           ))}

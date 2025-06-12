@@ -41,7 +41,11 @@ export default function SubmissionDetail() {
       return;
     }
     const { data: urlData } = supabase.storage.from(field).getPublicUrl(filePath);
-    setForm(f => ({ ...f, [`${field}_url`]: urlData.publicUrl }));
+    let column = '';
+    if (field === 'lab-results') column = 'lab_results_url';
+    else if (field === 'fedex-labels') column = 'fedex_label_url';
+    else column = `${field}_url`;
+    setForm(f => ({ ...f, [column]: urlData.publicUrl }));
     toast({ title: 'File uploaded', status: 'success' });
   };
 

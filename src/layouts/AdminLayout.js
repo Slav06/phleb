@@ -7,9 +7,9 @@ function AdminLayout() {
   return (
     <Box minH="100vh" bg="gray.50">
       <Navigation userType="admin" />
-      <Container maxW="container.xl" py={8}>
+      <Box w="100vw" maxW="100vw" px={0} py={0}>
         <Outlet />
-      </Container>
+      </Box>
     </Box>
   );
 }

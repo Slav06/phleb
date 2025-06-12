@@ -195,9 +195,21 @@ const PhlebotomistDashboard = () => {
   };
 
   const handleDeleteSubmission = async (submissionId) => {
-    if (!window.confirm('Are you sure you want to delete this incomplete draw?')) return;
-    const { error } = await supabase.from('submissions').delete().eq('id', submissionId);
-    if (!error) setPastSubmissions(pastSubmissions.filter(s => s.id !== submissionId));
+    try {
+      const { error } = await supabase
+        .from('submissions')
+        .update({
+          deleted_by_lab: true,
+          deleted_at: new Date().toISOString(),
+          deleted_by: id // assuming 'id' is the current lab's id
+        })
+        .eq('id', submissionId);
+      if (error) throw error;
+      setPastSubmissions(pastSubmissions.filter(sub => sub.id !== submissionId));
+      toast({ title: 'Submission marked as deleted', status: 'success', duration: 3000, isClosable: true });
+    } catch (error) {
+      toast({ title: 'Error deleting submission', description: error.message, status: 'error', duration: 5000, isClosable: true });
+    }
   };
 
   // Group draws by status
