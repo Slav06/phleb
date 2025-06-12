@@ -11,10 +11,10 @@ export default function AgreementSign({ labInfo }) {
   const sigPad = useRef();
   const toast = useToast();
   const navigate = useNavigate();
+  const [isSigned, setIsSigned] = useState(false);
 
   useEffect(() => {
-    // Pre-fill date and company name if available
-    setSignDate(new Date().toISOString().slice(0, 10));
+    // Do not pre-fill the date; leave it blank so the user must select it
     if (labInfo && labInfo.company_name) setCompanyName(labInfo.company_name);
   }, [labInfo]);
 
@@ -79,7 +79,7 @@ export default function AgreementSign({ labInfo }) {
         </FormControl>
         <FormControl isRequired>
           <FormLabel>Printed Name/Title</FormLabel>
-          <Input value={printedName} onChange={e => setPrintedName(e.target.value)} placeholder="Name / Title" />
+          <Input value={printedName} onChange={e => setPrintedName(e.target.value)} placeholder="Name / Title" autoComplete="off" />
         </FormControl>
         <FormControl isRequired>
           <FormLabel>Date</FormLabel>
@@ -92,11 +92,13 @@ export default function AgreementSign({ labInfo }) {
               penColor="black"
               canvasProps={{ width: 400, height: 100, className: 'sigCanvas' }}
               ref={sigPad}
+              onEnd={() => setIsSigned(!sigPad.current.isEmpty())}
+              onClear={() => setIsSigned(false)}
             />
           </Box>
           <Button mt={2} size="sm" onClick={() => sigPad.current && sigPad.current.clear()}>Clear</Button>
         </FormControl>
-        {(!companyName || !printedName || !signDate || !sigPad.current || sigPad.current.isEmpty()) && (
+        {(!companyName || !printedName || !signDate || !isSigned) && (
           <Text color="red.500" fontSize="sm" mt={2}>
             Please fill all fields and sign to continue.
           </Text>
@@ -104,7 +106,12 @@ export default function AgreementSign({ labInfo }) {
         <Button
           colorScheme="blue"
           onClick={handleSign}
-          isDisabled={!companyName || !printedName || !signDate || !sigPad.current || sigPad.current.isEmpty()}
+          isDisabled={
+            !companyName ||
+            !printedName ||
+            !signDate ||
+            !isSigned
+          }
         >
           Complete & Download PDF
         </Button>
