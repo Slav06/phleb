@@ -372,16 +372,37 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
   };
 
   const handleImageUpload = async (file, type) => {
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        const base64Image = reader.result.split(',')[1];
-        const analysis = await analyzeImage(base64Image, type);
-        if (analysis) {
-          setForm((f) => ({ ...f, ...analysis }));
-        }
-      };
-      reader.readAsDataURL(file);
+    if (!file || !submissionId) return;
+    let bucket = '';
+    let column = '';
+    if (type === 'script') {
+      bucket = 'scripts';
+      column = 'script_url';
+    } else if (type === 'insurance') {
+      bucket = 'insurance-cards';
+      column = 'insurance_card_url';
+    } else {
+      return;
+    }
+    const fileExt = file.name.split('.').pop();
+    const filePath = `${bucket}/${submissionId}.${fileExt}`;
+    // Upload to Supabase Storage
+    const { error: uploadError } = await supabase.storage.from(bucket).upload(filePath, file, { upsert: true });
+    if (uploadError) {
+      toast({ title: 'Upload failed', description: uploadError.message, status: 'error' });
+      return;
+    }
+    // Get public URL
+    const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(filePath);
+    if (urlData && urlData.publicUrl) {
+      // Update submission record
+      const { error: updateError } = await supabase.from('submissions').update({ [column]: urlData.publicUrl }).eq('id', submissionId);
+      if (updateError) {
+        toast({ title: 'Error saving file URL', description: updateError.message, status: 'error' });
+        return;
+      }
+      setForm(f => ({ ...f, [column]: urlData.publicUrl }));
+      toast({ title: 'File uploaded', status: 'success' });
     }
   };
 

@@ -220,6 +220,8 @@ function SubmissionsList() {
               <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Status</Th>
               <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">FedEx</Th>
               <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Lab Results</Th>
+              <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Doctor's Script</Th>
+              <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Insurance Card</Th>
               <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Deleted</Th>
               <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Actions</Th>
             </Tr>
@@ -306,6 +308,20 @@ function SubmissionsList() {
                       fontWeight="bold"
                       onChange={e => handleLabResultsUpload(submission.id, e.target.files[0])}
                     />
+                  )}
+                </Td>
+                <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">
+                  {submission.script_url ? (
+                    <Button as="a" href={submission.script_url} target="_blank" leftIcon={<AttachmentIcon />} size="md" colorScheme="blue" variant="outline" px={2} py={0.5} fontWeight="bold">View</Button>
+                  ) : (
+                    <Text color="gray.400">No file</Text>
+                  )}
+                </Td>
+                <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">
+                  {submission.insurance_card_url ? (
+                    <Button as="a" href={submission.insurance_card_url} target="_blank" leftIcon={<AttachmentIcon />} size="md" colorScheme="blue" variant="outline" px={2} py={0.5} fontWeight="bold">View</Button>
+                  ) : (
+                    <Text color="gray.400">No file</Text>
                   )}
                 </Td>
                 <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center" bg={submission.deleted_by_lab ? 'red.400' : idx % 2 === 0 ? 'white' : 'gray.100'} color={submission.deleted_by_lab ? 'white' : 'black'}>
