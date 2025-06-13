@@ -49,40 +49,54 @@ export default function LabDrawSummary() {
           </Box>
         )}
         {/* Patient Info */}
-        <Box>
-          <Text fontWeight="bold">Patient Info</Text>
-          <Text>Name: {submission.patient_name}</Text>
-          <Text>Email: {submission.patient_email}</Text>
-          <Text>Address: {submission.patient_address}</Text>
-          <Text>DOB: {submission.patient_dob}</Text>
-        </Box>
-        <Box>
-          <Text fontWeight="bold">Doctor Info</Text>
-          <Text>Name: {submission.doctor_name}</Text>
-          <Text>Email: {submission.doctor_email}</Text>
-          <Text>Phone: {submission.doctor_phone}</Text>
-          <Text>Fax: {submission.doctor_fax}</Text>
-          <Text>Address: {submission.doctor_address}</Text>
-        </Box>
-        <Box>
-          <Text fontWeight="bold">Insurance Info</Text>
-          <Text>Company: {submission.insurance_company}</Text>
-          <Text>Policy #: {submission.insurance_policy_number}</Text>
-        </Box>
-        <Box>
-          <Text fontWeight="bold">Delivery Info</Text>
-          <Text>FedEx Ship From: {submission.fedex_ship_from}</Text>
-          <Text>STAT Test: {submission.stat_test ? 'Yes' : 'No'}</Text>
-        </Box>
-        <Box>
-          <Text fontWeight="bold">Download Links</Text>
-          {submission.fedex_label_url ? (
-            <Button as="a" href={submission.fedex_label_url} target="_blank" colorScheme="blue" mb={2}>Download FedEx Label</Button>
-          ) : null}
-          {submission.lab_results_url ? (
-            <Button as="a" href={submission.lab_results_url} target="_blank" colorScheme="green">Download Lab Results</Button>
-          ) : null}
-        </Box>
+        {(submission.patient_name || submission.patient_email || submission.patient_address || submission.patient_dob) && (
+          <Box>
+            <Text fontWeight="bold">Patient Info</Text>
+            {submission.patient_name && <Text>Name: {submission.patient_name}</Text>}
+            {submission.patient_email && <Text>Email: {submission.patient_email}</Text>}
+            {submission.patient_address && <Text>Address: {submission.patient_address}</Text>}
+            {submission.patient_dob && <Text>DOB: {submission.patient_dob}</Text>}
+          </Box>
+        )}
+        {/* Doctor Info */}
+        {(submission.doctor_name || submission.doctor_email || submission.doctor_phone || submission.doctor_fax || submission.doctor_address) && (
+          <Box>
+            <Text fontWeight="bold">Doctor Info</Text>
+            {submission.doctor_name && <Text>Name: {submission.doctor_name}</Text>}
+            {submission.doctor_email && <Text>Email: {submission.doctor_email}</Text>}
+            {submission.doctor_phone && <Text>Phone: {submission.doctor_phone}</Text>}
+            {submission.doctor_fax && <Text>Fax: {submission.doctor_fax}</Text>}
+            {submission.doctor_address && <Text>Address: {submission.doctor_address}</Text>}
+          </Box>
+        )}
+        {/* Insurance Info */}
+        {(submission.insurance_company || submission.insurance_policy_number) && (
+          <Box>
+            <Text fontWeight="bold">Insurance Info</Text>
+            {submission.insurance_company && <Text>Company: {submission.insurance_company}</Text>}
+            {submission.insurance_policy_number && <Text>Policy #: {submission.insurance_policy_number}</Text>}
+          </Box>
+        )}
+        {/* Delivery Info */}
+        {(submission.fedex_ship_from || submission.stat_test) && (
+          <Box>
+            <Text fontWeight="bold">Delivery Info</Text>
+            {submission.fedex_ship_from && <Text>FedEx Ship From: {submission.fedex_ship_from}</Text>}
+            {typeof submission.stat_test !== 'undefined' && <Text>STAT Test: {submission.stat_test ? 'Yes' : 'No'}</Text>}
+          </Box>
+        )}
+        {/* Download Links */}
+        {(submission.fedex_label_url || submission.lab_results_url) && (
+          <Box>
+            <Text fontWeight="bold">Download Links</Text>
+            {submission.fedex_label_url && (
+              <Button as="a" href={submission.fedex_label_url} target="_blank" colorScheme="blue" mb={2}>Download FedEx Label</Button>
+            )}
+            {submission.lab_results_url && (
+              <Button as="a" href={submission.lab_results_url} target="_blank" colorScheme="green">Download Lab Results</Button>
+            )}
+          </Box>
+        )}
       </VStack>
       <Button mt={8} onClick={() => navigate(`/lab/${id}`)} colorScheme="blue" variant="outline">Back to Dashboard</Button>
     </Box>

@@ -372,7 +372,22 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
   };
 
   const handleImageUpload = async (file, type) => {
-    if (!file || !submissionId) return;
+    if (!file) return;
+    // Ensure a draft exists before uploading
+    let currentSubmissionId = submissionId;
+    if (!currentSubmissionId) {
+      // Create a draft
+      const { data: draft, error: draftError } = await supabase.from('submissions').insert([
+        { lab_id: id, status: 'in_progress', submitted_at: new Date().toISOString() }
+      ]).select('id').single();
+      if (draftError || !draft || !draft.id) {
+        toast({ title: 'Draft creation failed', description: draftError?.message || 'Unknown error', status: 'error' });
+        return;
+      }
+      setSubmissionId(Number(draft.id));
+      setSearchParams({ submissionId: draft.id });
+      currentSubmissionId = draft.id;
+    }
     let bucket = '';
     let column = '';
     if (type === 'script') {
@@ -385,7 +400,7 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
       return;
     }
     const fileExt = file.name.split('.').pop();
-    const filePath = `${bucket}/${submissionId}.${fileExt}`;
+    const filePath = `${bucket}/${currentSubmissionId}.${fileExt}`;
     // Upload to Supabase Storage
     const { error: uploadError } = await supabase.storage.from(bucket).upload(filePath, file, { upsert: true });
     if (uploadError) {
@@ -396,7 +411,7 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
     const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(filePath);
     if (urlData && urlData.publicUrl) {
       // Update submission record
-      const { error: updateError } = await supabase.from('submissions').update({ [column]: urlData.publicUrl }).eq('id', submissionId);
+      const { error: updateError } = await supabase.from('submissions').update({ [column]: urlData.publicUrl }).eq('id', currentSubmissionId);
       if (updateError) {
         toast({ title: 'Error saving file URL', description: updateError.message, status: 'error' });
         return;
