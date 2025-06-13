@@ -1,6 +1,6 @@
 import React from 'react';
 import { ChakraProvider, CSSReset } from '@chakra-ui/react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 
 // Landing Page
@@ -30,13 +30,26 @@ import SubmissionDetail from './components/admin/SubmissionDetail';
 // Shared Components
 import Navigation from './components/shared/Navigation';
 
+// Add this component before the App component
+function MobileLabRouteGuard({ children }) {
+  const location = useLocation();
+  const labId = location.pathname.split('/')[2]; // Get lab ID from URL
+
+  // If trying to access landing page or any other route without lab ID, redirect to their portal
+  if (!labId || location.pathname === '/') {
+    return <Navigate to={`/lab/${labId}`} replace />;
+  }
+
+  return children;
+}
+
 function App() {
   return (
     <ChakraProvider>
       <CSSReset />
       <Router>
         <Routes>
-          {/* Landing Page */}
+          {/* Landing Page - Only accessible if not a mobile lab user */}
           <Route path="/" element={<LandingPage />} />
 
           {/* Patient Routes */}
@@ -47,7 +60,11 @@ function App() {
           </Route>
 
           {/* Phlebotomist Routes (scoped by lab id) */}
-          <Route path="/lab/:id/*" element={<PhlebotomistLayout />}> 
+          <Route path="/lab/:id/*" element={
+            <MobileLabRouteGuard>
+              <PhlebotomistLayout />
+            </MobileLabRouteGuard>
+          }> 
             <Route index element={<PhlebotomistDashboard />} />
             <Route path="new-blood-draw" element={<BloodDrawForm />} />
             <Route path="working-hours" element={<WorkingHoursForm />} />

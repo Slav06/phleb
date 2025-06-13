@@ -28,6 +28,7 @@ import {
   Th,
   Link,
   Spinner,
+  Collapse,
 } from '@chakra-ui/react';
 import { Image as ChakraImage } from '@chakra-ui/react';
 import { supabase } from './supabaseClient';
@@ -72,7 +73,7 @@ const steps = [
 ];
 
 // DropZone component for drag-and-drop file upload with glassmorphism, animation, and remove button
-const DropZone = ({ label, file, setFile, preview, setPreview }) => {
+const DropZone = ({ label, file, setFile, preview, setPreview, mb }) => {
   const inputRef = React.useRef();
   const [dragActive, setDragActive] = useState(false);
   const bgColor = useColorModeValue('white', 'gray.800');
@@ -135,6 +136,7 @@ const DropZone = ({ label, file, setFile, preview, setPreview }) => {
         transition="all 0.3s"
         cursor="pointer"
         position="relative"
+        mb={mb}
       >
         <VStack spacing={4}>
           <Icon as={FaCloudUploadAlt} boxSize={12} color="blue.400" />
@@ -258,13 +260,18 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
   const [showShareLink, setShowShareLink] = useState(false);
   const [copied, setCopied] = useState(false);
   const [upcomingDraws, setUpcomingDraws] = useState([]);
-  const [searchParams] = useSearchParams();
-  const emailFromQuery = searchParams.get('email');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const submissionIdFromUrlRaw = searchParams.get('submissionId');
+  const submissionIdFromUrl = submissionIdFromUrlRaw && !isNaN(Number(submissionIdFromUrlRaw)) && Number(submissionIdFromUrlRaw) > 0 ? Number(submissionIdFromUrlRaw) : null;
   const [submissionId, setSubmissionId] = useState(null);
   const isDraftCreated = useRef(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
   const navigate = useNavigate();
+  const [selectedAddress, setSelectedAddress] = useState("");
+  const [needFedexLabelChoice, setNeedFedexLabelChoice] = useState(null);
+  const [showPatientDoctorLab, setShowPatientDoctorLab] = useState(false);
+  const [showInsuranceInfo, setShowInsuranceInfo] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -296,20 +303,22 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
     setSaving(true);
     setSaveError(null);
     const dbData = { ...mapFormToDb(newForm, labInfo, id), status: 'in_progress', submitted_at: new Date().toISOString() };
+    console.log('DB Data (insert/update):', dbData);
     try {
-      if (!submissionId && id) {
-        const { data, error } = await supabase.from('submissions').insert([dbData]).select('id').single();
-        if (!error && data && data.id) {
-          setSubmissionId(data.id);
-          isDraftCreated.current = true;
-        } else if (error) {
+      if (submissionId && submissionId > 0) {
+        const { error } = await supabase.from('submissions').update(dbData).eq('id', submissionId);
+        if (error) {
           setSaveError(error.message);
           console.log('Save error:', error.message);
           alert('Save error: ' + error.message);
         }
-      } else if (submissionId) {
-        const { error } = await supabase.from('submissions').update(dbData).eq('id', submissionId);
-        if (error) {
+      } else if (id) {
+        const { data, error } = await supabase.from('submissions').insert([dbData]).select('id').single();
+        if (!error && data && data.id && Number(data.id) > 0) {
+          setSubmissionId(Number(data.id));
+          setForm(f => ({ ...f, ...data }));
+          isDraftCreated.current = true;
+        } else if (error) {
           setSaveError(error.message);
           console.log('Save error:', error.message);
           alert('Save error: ' + error.message);
@@ -325,17 +334,25 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault && e.preventDefault();
     setLoading(true);
     try {
+      let newSubmissionId = submissionId;
       const dbData = { ...mapFormToDb(form, labInfo, id), status: 'pending', submitted_at: new Date().toISOString() };
-      // Update the draft submission if it exists, otherwise insert new
-      if (submissionId) {
+      if (submissionId && submissionId > 0) {
         const { error } = await supabase.from('submissions').update(dbData).eq('id', submissionId);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('submissions').insert([dbData]);
+        const { data, error } = await supabase.from('submissions').insert([dbData]).select('id').single();
         if (error) throw error;
+        if (data && data.id) {
+          newSubmissionId = Number(data.id);
+          setSubmissionId(newSubmissionId);
+        }
+      }
+      // Now, if user requested a FedEx label, do it with the new ID
+      if (needFedexLabelChoice === true && selectedAddress && newSubmissionId) {
+        await handleFedExLabelRequest(newSubmissionId);
       }
       setMessage({ type: 'success', text: 'Form submitted successfully!' });
       setForm(initialState);
@@ -345,7 +362,7 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
       setSubmissionId(null);
       isDraftCreated.current = false;
       setTimeout(() => {
-        navigate(`/lab/${id}/summary/${submissionId}`);
+        navigate(`/lab/${id}/summary/${newSubmissionId}`);
       }, 1000);
     } catch (err) {
       setMessage({ type: 'error', text: 'An error occurred. Please try again.' });
@@ -368,25 +385,96 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
     }
   };
 
-  const handleSavePickupAddress = () => {
-    const newAddress = `${form.addressLine1}, ${form.city}, ${form.state} ${form.zip}`;
-    if (!deliveryTemplates.some(template => template.name === newAddress)) {
-      setDeliveryTemplates([...deliveryTemplates, { id: Date.now(), name: newAddress }]);
-      setSaveConfirmation(true);
-      setTimeout(() => setSaveConfirmation(false), 3000);
+  // Fetch delivery templates from Supabase on mount
+  useEffect(() => {
+    const fetchDeliveryTemplates = async () => {
+      if (!id) return;
+      const { data, error } = await supabase
+        .from('delivery_templates')
+        .select('*')
+        .eq('lab_id', id)
+        .order('created_at', { ascending: false });
+      if (!error && data) setDeliveryTemplates(data);
+    };
+    fetchDeliveryTemplates();
+  }, [id]);
+
+  // Save pickup address to Supabase and local state
+  const handleSavePickupAddress = async () => {
+    const newAddress = {
+      lab_id: id,
+      address_line1: form.addressLine1,
+      city: form.city,
+      state: form.state,
+      zip: form.zip,
+    };
+    // Prevent duplicates in local state
+    if (!deliveryTemplates.some(template => template.address_line1 === newAddress.address_line1 && template.city === newAddress.city && template.state === newAddress.state && template.zip === newAddress.zip)) {
+      // Save to Supabase
+      const { data, error } = await supabase.from('delivery_templates').insert([newAddress]).select('*').single();
+      if (!error && data) {
+        setDeliveryTemplates([data, ...deliveryTemplates]);
+        setSaveConfirmation(true);
+        setTimeout(() => setSaveConfirmation(false), 3000);
+      } else if (error) {
+        alert('Error saving address: ' + error.message);
+      }
     } else {
       alert('This address is already saved.');
     }
   };
 
-  const handleRequestFedExLabel = () => {
-    const newRequest = {
-      id: Date.now(),
-      date: new Date().toLocaleDateString(),
-      status: 'Pending',
-      labelUrl: 'https://example.com/fedex-label.pdf', // Replace with actual label URL
+  // Fetch past FedEx label requests for this submission
+  useEffect(() => {
+    if (!submissionId) return;
+    const fetchFedExRequests = async () => {
+      const { data, error } = await supabase
+        .from('fedex_label_requests')
+        .select('*')
+        .eq('submission_id', submissionId)
+        .order('requested_at', { ascending: false });
+      if (!error && data) setPastRequests(data);
     };
-    setPastRequests([...pastRequests, newRequest]);
+    fetchFedExRequests();
+  }, [submissionId]);
+
+  // Update handleFedExLabelRequest to accept an optional idOverride
+  const handleFedExLabelRequest = async (idOverride) => {
+    const fedexId = idOverride || submissionId;
+    if (!fedexId || isNaN(fedexId) || fedexId <= 0 || !selectedAddress) return;
+    try {
+      // Insert into fedex_label_requests
+      const { error: requestError } = await supabase
+        .from('fedex_label_requests')
+        .insert({
+          submission_id: Number(fedexId),
+          address: selectedAddress,
+          status: 'pending',
+          requested_at: new Date().toISOString(),
+        });
+      if (requestError) throw requestError;
+
+      // Update need_fedex_label in submissions
+      const { error: updateError } = await supabase
+        .from('submissions')
+        .update({ need_fedex_label: true })
+        .eq('id', fedexId);
+      if (updateError) throw updateError;
+
+      // Sync form state so auto-save doesn't overwrite
+      setForm(f => ({ ...f, needFedexLabel: true }));
+
+      // Refresh past requests
+      const { data } = await supabase
+        .from('fedex_label_requests')
+        .select('*')
+        .eq('submission_id', fedexId)
+        .order('requested_at', { ascending: false });
+      setPastRequests(data || []);
+    } catch (error) {
+      console.error('Error requesting FedEx label:', error);
+      alert('Failed to request FedEx label. Please try again.');
+    }
   };
 
   // Step content
@@ -414,72 +502,84 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
               </Box>
             )}
             {/* DropZone for Script Image at the very top */}
-            <DropZone
-              label="Doctor's Script"
-              file={form.scriptImage}
-              setFile={(file) => {
-                setForm((f) => ({ ...f, scriptImage: file }));
-                handleImageUpload(file, 'script');
-              }}
-              preview={scriptPreview}
-              setPreview={setScriptPreview}
-            />
-            {/* Patient, Doctor, Lab fields all in one step */}
             <Box>
-              <Text mb={4} fontSize="lg" fontWeight="medium" color="blue.400">
-                Patient, Doctor, and Lab Information
-              </Text>
-              <Grid templateColumns={'1fr'} gap={6}>
-                {/* Patient Fields */}
-                <GridItem>
-                  <FloatingInput label="Patient Name" id="patientName" name="patientName" value={form.patientName} onChange={handleChange} />
-                </GridItem>
-                <GridItem>
-                  <FloatingInput label="Patient Address" id="patientAddress" name="patientAddress" value={form.patientAddress} onChange={handleChange} />
-                </GridItem>
-                <GridItem>
-                  <FloatingInput label="Patient Email" id="patientEmail" name="patientEmail" type="email" value={form.patientEmail} onChange={handleChange} />
-                </GridItem>
-                <GridItem>
-                  <FloatingInput label="Patient Date of Birth" id="patientDOB" name="patientDOB" type="date" value={form.patientDOB} onChange={handleChange} />
-                </GridItem>
-                {/* Doctor Fields */}
-                <GridItem>
-                  <FloatingInput label="Doctor Name" id="doctorName" name="doctorName" value={form.doctorName} onChange={handleChange} />
-                </GridItem>
-                <GridItem>
-                  <FloatingInput label="Doctor Address" id="doctorAddress" name="doctorAddress" value={form.doctorAddress} onChange={handleChange} />
-                </GridItem>
-                <GridItem>
-                  <FloatingInput label="Doctor Phone" id="doctorPhone" name="doctorPhone" type="tel" value={form.doctorPhone} onChange={handleChange} />
-                </GridItem>
-                <GridItem>
-                  <FloatingInput label="Doctor Fax" id="doctorFax" name="doctorFax" type="tel" value={form.doctorFax} onChange={handleChange} />
-                </GridItem>
-                <GridItem>
-                  <FloatingInput label="Doctor Email" id="doctorEmail" name="doctorEmail" type="email" value={form.doctorEmail} onChange={handleChange} />
-                </GridItem>
-                {/* Lab & Collection Fields */}
-                <GridItem>
-                  <FormControl>
-                    <FormLabel>Lab Brand</FormLabel>
-                    <Select name="labBrand" value={form.labBrand} onChange={handleChange} placeholder="Select lab brand">
-                      {labOptions.map((option) => (
-                        <option key={option.value} value={option.value}>{option.label}</option>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </GridItem>
-                <GridItem>
-                  <FloatingInput label="Blood Collection Time" id="bloodCollectionTime" name="bloodCollectionTime" type="datetime-local" value={form.bloodCollectionTime} onChange={handleChange} />
-                </GridItem>
-                <GridItem>
-                  <FormControl>
-                    <FormLabel>Special Instructions</FormLabel>
-                    <Input as="textarea" name="specialInstructions" value={form.specialInstructions || ''} onChange={handleChange} placeholder="Any special instructions..." />
-                  </FormControl>
-                </GridItem>
-              </Grid>
+              <Text fontSize="xl" fontWeight="bold" mb={2}>Doctor's Script</Text>
+              <DropZone
+                label="Upload Doctor's Script"
+                file={form.scriptImage}
+                setFile={(file) => {
+                  setForm((f) => ({ ...f, scriptImage: file }));
+                  handleImageUpload(file, 'script');
+                }}
+                preview={scriptPreview}
+                setPreview={setScriptPreview}
+                mb={4}
+              />
+              {/* Move Patient/Doctor/Lab Info here */}
+              <Button
+                onClick={() => setShowPatientDoctorLab((v) => !v)}
+                leftIcon={<FaChevronRight style={{ transform: showPatientDoctorLab ? 'rotate(90deg)' : 'none', transition: '0.2s' }} />}
+                variant="outline"
+                colorScheme="blue"
+                mb={2}
+                w="100%"
+                justifyContent="flex-start"
+              >
+                {showPatientDoctorLab ? 'Hide' : 'Add/Update'} Patient, Doctor, and Lab Info
+              </Button>
+              <Collapse in={showPatientDoctorLab} animateOpacity>
+                <Box p={4} bg="gray.50" borderRadius="md" boxShadow="sm">
+                  {/* Patient, Doctor, Lab fields */}
+                  <Grid templateColumns={'1fr'} gap={6}>
+                    <GridItem>
+                      <FloatingInput label="Patient Name" id="patientName" name="patientName" value={form.patientName} onChange={handleChange} />
+                    </GridItem>
+                    <GridItem>
+                      <FloatingInput label="Patient Address" id="patientAddress" name="patientAddress" value={form.patientAddress} onChange={handleChange} />
+                    </GridItem>
+                    <GridItem>
+                      <FloatingInput label="Patient Email" id="patientEmail" name="patientEmail" type="email" value={form.patientEmail} onChange={handleChange} />
+                    </GridItem>
+                    <GridItem>
+                      <FloatingInput label="Patient Date of Birth" id="patientDOB" name="patientDOB" type="date" value={form.patientDOB} onChange={handleChange} />
+                    </GridItem>
+                    <GridItem>
+                      <FloatingInput label="Doctor Name" id="doctorName" name="doctorName" value={form.doctorName} onChange={handleChange} />
+                    </GridItem>
+                    <GridItem>
+                      <FloatingInput label="Doctor Address" id="doctorAddress" name="doctorAddress" value={form.doctorAddress} onChange={handleChange} />
+                    </GridItem>
+                    <GridItem>
+                      <FloatingInput label="Doctor Phone" id="doctorPhone" name="doctorPhone" type="tel" value={form.doctorPhone} onChange={handleChange} />
+                    </GridItem>
+                    <GridItem>
+                      <FloatingInput label="Doctor Fax" id="doctorFax" name="doctorFax" type="tel" value={form.doctorFax} onChange={handleChange} />
+                    </GridItem>
+                    <GridItem>
+                      <FloatingInput label="Doctor Email" id="doctorEmail" name="doctorEmail" type="email" value={form.doctorEmail} onChange={handleChange} />
+                    </GridItem>
+                    <GridItem>
+                      <FormControl>
+                        <FormLabel>Lab Brand</FormLabel>
+                        <Select name="labBrand" value={form.labBrand} onChange={handleChange} placeholder="Select lab brand">
+                          {labOptions.map((option) => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    </GridItem>
+                    <GridItem>
+                      <FloatingInput label="Blood Collection Time" id="bloodCollectionTime" name="bloodCollectionTime" type="datetime-local" value={form.bloodCollectionTime} onChange={handleChange} />
+                    </GridItem>
+                    <GridItem>
+                      <FormControl>
+                        <FormLabel>Special Instructions</FormLabel>
+                        <Input as="textarea" name="specialInstructions" value={form.specialInstructions || ''} onChange={handleChange} placeholder="Any special instructions..." />
+                      </FormControl>
+                    </GridItem>
+                  </Grid>
+                </Box>
+              </Collapse>
             </Box>
           </VStack>
         );
@@ -487,16 +587,19 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
         return (
           <VStack spacing={8} align="stretch">
             {/* DropZone for Insurance Card at the top */}
-            <DropZone
-              label="Insurance Card"
-              file={form.insuranceCardImage}
-              setFile={(file) => {
-                setForm((f) => ({ ...f, insuranceCardImage: file }));
-                handleImageUpload(file, 'insurance');
-              }}
-              preview={insurancePreview}
-              setPreview={setInsurancePreview}
-            />
+            <Box mt={6}>
+              <Text fontSize="xl" fontWeight="bold" mb={2}>Insurance Card</Text>
+              <DropZone
+                label="Upload Insurance Card"
+                file={form.insuranceCardImage}
+                setFile={(file) => {
+                  setForm((f) => ({ ...f, insuranceCardImage: file }));
+                  handleImageUpload(file, 'insurance');
+                }}
+                preview={insurancePreview}
+                setPreview={setInsurancePreview}
+              />
+            </Box>
             <Box>
               <Text mb={4} fontSize="lg" fontWeight="medium" color="blue.400">
                 Insurance Information
@@ -608,105 +711,134 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
           <VStack spacing={8} align="stretch">
             <Box>
               <Text mb={2} fontSize="xl" fontWeight="bold" color="blue.700">
-                Request a New Fedex Label for your draw
+                Do you need a FedEx label for this blood draw?
               </Text>
-              <Text mb={4} color="gray.600">
-                Please choose a SHIP FROM address from this list below or add a new one
-              </Text>
-              <Grid templateColumns={'1fr'} gap={6}>
-                <GridItem>
-                  <FormControl>
-                    <FormLabel>Choose Previously Used Address</FormLabel>
-                    <Select name="deliveryTemplate" value={form.deliveryTemplate} onChange={handleChange} placeholder="Select delivery template">
-                      {deliveryTemplates.map((template) => (
-                        <option key={template.id} value={template.id}>{template.name}</option>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </GridItem>
-                <GridItem>
-                  <Text fontSize="md" fontWeight="medium" color="blue.400">Add New Address</Text>
-                </GridItem>
-                <GridItem>
-                  <FloatingInput
-                    label="Address Line 1"
-                    id="addressLine1"
-                    name="addressLine1"
-                    value={form.addressLine1}
-                    onChange={handleChange}
-                    placeholder="Start typing to auto-fill"
-                  />
-                </GridItem>
-                <GridItem>
-                  <FloatingInput
-                    label="City"
-                    id="city"
-                    name="city"
-                    value={form.city}
-                    onChange={handleChange}
-                  />
-                </GridItem>
-                <GridItem>
-                  <FloatingInput
-                    label="State"
-                    id="state"
-                    name="state"
-                    value={form.state}
-                    onChange={handleChange}
-                  />
-                </GridItem>
-                <GridItem>
-                  <FloatingInput
-                    label="Zip"
-                    id="zip"
-                    name="zip"
-                    value={form.zip}
-                    onChange={handleChange}
-                  />
-                </GridItem>
-                <GridItem>
-                  <Button colorScheme="blue" onClick={handleSavePickupAddress}>
-                    Save Pickup Address
-                  </Button>
-                  {saveConfirmation && (
-                    <Text color="green.500" mt={2}>Address saved successfully!</Text>
-                  )}
-                </GridItem>
-                <GridItem>
-                  <Button colorScheme="blue" onClick={handleRequestFedExLabel}>
-                    Request New FedEx Label
-                  </Button>
-                </GridItem>
-                <GridItem>
-                  <FormControl>
-                    <FormLabel>Past Requests</FormLabel>
-                    <Table variant="simple">
-                      <Thead>
-                        <Tr>
-                          <Th>Date</Th>
-                          <Th>Status</Th>
-                          <Th>Label</Th>
-                        </Tr>
-                      </Thead>
-                      <Tbody>
-                        {pastRequests.map((request) => (
-                          <Tr key={request.id}>
-                            <Td>{request.date}</Td>
-                            <Td>{request.status}</Td>
-                            <Td>
-                              {request.labelUrl && !request.labelUrl.includes('example.com') ? (
-                                <Button size="sm" colorScheme="blue" as="a" href={request.labelUrl} target="_blank">Download</Button>
-                              ) : (
-                                <Text color="gray.500" fontSize="sm">Label not uploaded yet. Please check back soon.</Text>
-                              )}
-                            </Td>
-                          </Tr>
-                        ))}
-                      </Tbody>
-                    </Table>
-                  </FormControl>
-                </GridItem>
-              </Grid>
+              <HStack spacing={4} mb={4}>
+                <Button
+                  colorScheme={needFedexLabelChoice === true ? 'blue' : 'gray'}
+                  variant={needFedexLabelChoice === true ? 'solid' : 'outline'}
+                  onClick={() => setNeedFedexLabelChoice(true)}
+                >
+                  Yes, I need a label
+                </Button>
+                <Button
+                  colorScheme={needFedexLabelChoice === false ? 'gray' : 'blue'}
+                  variant={needFedexLabelChoice === false ? 'solid' : 'outline'}
+                  onClick={() => setNeedFedexLabelChoice(false)}
+                >
+                  No, I don't need one (Skip)
+                </Button>
+              </HStack>
+              {needFedexLabelChoice === false && (
+                <Box p={4} bg="green.50" borderRadius="md" mt={2}>
+                  <Text color="green.700" fontWeight="medium">You chose to skip requesting a FedEx label. You can always request one later if needed.</Text>
+                </Box>
+              )}
+              {needFedexLabelChoice === true && (
+                <Box mt={6}>
+                  <Text mb={4} color="gray.600">
+                    Please choose a SHIP FROM address from this list below or add a new one
+                  </Text>
+                  <Grid templateColumns={'1fr'} gap={6}>
+                    <GridItem>
+                      <FormControl>
+                        <FormLabel>Choose Previously Used Address</FormLabel>
+                        <Select
+                          name="deliveryTemplate"
+                          value={selectedAddress}
+                          onChange={e => setSelectedAddress(e.target.value)}
+                          placeholder="Select delivery template"
+                        >
+                          {deliveryTemplates.map((template) => (
+                            <option key={template.id} value={`${template.address_line1}, ${template.city}, ${template.state} ${template.zip}`}>
+                              {template.address_line1}, {template.city}, {template.state} {template.zip}
+                            </option>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    </GridItem>
+                    <GridItem>
+                      <Text fontSize="md" fontWeight="medium" color="blue.400">Add New Address</Text>
+                    </GridItem>
+                    <GridItem>
+                      <FloatingInput
+                        label="Address Line 1"
+                        id="addressLine1"
+                        name="addressLine1"
+                        value={form.addressLine1}
+                        onChange={handleChange}
+                        placeholder="Start typing to auto-fill"
+                      />
+                    </GridItem>
+                    <GridItem>
+                      <FloatingInput
+                        label="City"
+                        id="city"
+                        name="city"
+                        value={form.city}
+                        onChange={handleChange}
+                      />
+                    </GridItem>
+                    <GridItem>
+                      <FloatingInput
+                        label="State"
+                        id="state"
+                        name="state"
+                        value={form.state}
+                        onChange={handleChange}
+                      />
+                    </GridItem>
+                    <GridItem>
+                      <FloatingInput
+                        label="Zip"
+                        id="zip"
+                        name="zip"
+                        value={form.zip}
+                        onChange={handleChange}
+                      />
+                    </GridItem>
+                    <GridItem>
+                      <Button colorScheme="blue" onClick={handleSavePickupAddress}>
+                        Save Pickup Address
+                      </Button>
+                      {saveConfirmation && (
+                        <Text color="green.500" mt={2}>Address saved successfully!</Text>
+                      )}
+                    </GridItem>
+                    <GridItem>
+                      <FormControl>
+                        <FormLabel>Past Requests</FormLabel>
+                        <Table variant="simple">
+                          <Thead>
+                            <Tr>
+                              <Th>Date</Th>
+                              <Th>Status</Th>
+                              <Th>Label</Th>
+                              <Th>Address</Th>
+                            </Tr>
+                          </Thead>
+                          <Tbody>
+                            {pastRequests.map((request) => (
+                              <Tr key={request.id}>
+                                <Td>{new Date(request.requested_at).toLocaleString()}</Td>
+                                <Td>{request.status}</Td>
+                                <Td>
+                                  {request.label_url ? (
+                                    <Button size="sm" colorScheme="blue" as="a" href={request.label_url} target="_blank">Download</Button>
+                                  ) : (
+                                    <Text color="gray.500" fontSize="sm">Label not uploaded yet. Please check back soon.</Text>
+                                  )}
+                                </Td>
+                                <Td>{request.address}</Td>
+                              </Tr>
+                            ))}
+                          </Tbody>
+                        </Table>
+                      </FormControl>
+                    </GridItem>
+                  </Grid>
+                </Box>
+              )}
             </Box>
           </VStack>
         );
@@ -720,12 +852,22 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
 
   // Step navigation
   const handleNext = async (e) => {
+    console.log('handleNext called, current step:', step);
     if (step < 2) {
-      setStep((s) => Math.min(2, s + 1));
+      setStep((s) => {
+        const nextStep = Math.min(2, s + 1);
+        console.log('Advancing to step:', nextStep);
+        return nextStep;
+      });
     } else {
+      console.log('Calling handleSubmit from handleNext');
       await handleSubmit(e);
     }
   };
+
+  useEffect(() => {
+    console.log('Step changed:', step);
+  }, [step]);
 
   const renderStepNavigation = () => {
     return (
@@ -736,14 +878,16 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
           isDisabled={step === 0}
           variant="outline"
           colorScheme="blue"
+          type="button"
         >
           Previous
         </Button>
         <Button
           rightIcon={<FaChevronRight />}
-          onClick={handleNext}
+          onClick={step === 2 ? handleSubmit : handleNext}
           colorScheme="blue"
-          type={step === 2 ? 'submit' : 'button'}
+          type="button"
+          disabled={step === 2 && needFedexLabelChoice === true && !selectedAddress}
         >
           {step === 2 ? 'Complete' : 'Next'}
         </Button>
@@ -814,228 +958,330 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
   const newRequests = upcomingDraws.filter(draw => draw.status === 'new_request');
   const upcoming = upcomingDraws.filter(draw => !draw.status || draw.status === 'upcoming');
 
-  // Prefill patient email if emailFromQuery exists
+  // On mount, load or create draft submission by submissionId in URL
   useEffect(() => {
-    if (emailFromQuery) {
-      setForm(f => ({ ...f, patientEmail: emailFromQuery }));
-    }
-    // eslint-disable-next-line
-  }, [emailFromQuery]);
-
-  // Create draft submission as soon as patient email is entered
-  useEffect(() => {
-    const createDraftSubmission = async () => {
-      if (!isDraftCreated.current && form.patientEmail && id) {
-        const { data, error } = await supabase.from('submissions').insert([
+    const loadOrCreateDraft = async () => {
+      if (submissionIdFromUrl) {
+        // Load the draft by submissionId
+        const { data, error } = await supabase
+          .from('submissions')
+          .select('*')
+          .eq('id', submissionIdFromUrl)
+          .single();
+        if (data && data.id && Number(data.id) > 0) {
+          setSubmissionId(Number(data.id));
+          setForm(f => ({ ...f, ...data }));
+          isDraftCreated.current = true;
+        }
+      } else if (id) {
+        // No submissionId, create a new draft
+        const { data: newDraft, error: insertError } = await supabase.from('submissions').insert([
           {
-            patient_email: form.patientEmail,
-            lab_brand: form.labBrand || null,
+            lab_id: id,
             status: 'in_progress',
             submitted_at: new Date().toISOString(),
           },
         ]).select('id').single();
-        if (!error && data && data.id) {
-          setSubmissionId(data.id);
+        if (!insertError && newDraft && newDraft.id && Number(newDraft.id) > 0) {
+          setSubmissionId(Number(newDraft.id));
           isDraftCreated.current = true;
+          setSearchParams({ submissionId: newDraft.id });
         }
       }
     };
-    createDraftSubmission();
+    loadOrCreateDraft();
     // eslint-disable-next-line
-  }, [form.patientEmail, id]);
+  }, [id, submissionIdFromUrl]);
 
   return (
     <Box minH="100vh" bg="gray.50" color="gray.800" py={8}>
-      <Container maxW="container.xl">
+      <Container maxW="container.md">
         <VStack spacing={8} align="stretch">
           <Box as="header" w="100%" textAlign="center" mb={4}>
             <ChakraImage src="/qls-logo.png" alt="Quality Laboratory Service Logo" maxH="70px" mx="auto" mb={2} />
           </Box>
-          {/* If emailFromQuery, show read-only email and share button; else show input */}
-          {!isPatientMode && (
-            emailFromQuery ? (
-              <Box mb={4} p={4} bg="gray.100" borderRadius="md" boxShadow="sm">
-                <Text fontWeight="bold" mb={2}>Patient Email</Text>
-                <HStack>
-                  <Input value={emailFromQuery} isReadOnly size="md" width="auto" />
-                  <Button
-                    size="md"
-                    colorScheme="blue"
-                    variant="outline"
-                    borderRadius="md"
-                    onClick={() => {
-                      const link = `${window.location.origin}/lab/${id}/patient/${encodeURIComponent(emailFromQuery)}`;
-                      navigator.clipboard.writeText(link);
-                      toast({
-                        title: 'Link copied!',
-                        description: 'Patient form link copied to clipboard. You can now share it.',
-                        status: 'success',
-                        duration: 2000,
-                        isClosable: true,
-                      });
-                    }}
-                  >
-                    Share Patient Form Link
-                  </Button>
-                </HStack>
-              </Box>
-            ) : (
-              <Box
-                mb={8}
-                p={{ base: 4, md: 6 }}
-                bg="white"
-                borderRadius="2xl"
-                boxShadow="lg"
-                borderLeftWidth={6}
-                borderLeftColor="blue.400"
-                position="relative"
-                overflow="hidden"
-                _hover={{ boxShadow: '2xl' }}
-              >
-                <Icon
-                  as={FaShareAlt}
-                  color="blue.50"
-                  boxSize={32}
-                  position="absolute"
-                  top={-6}
-                  right={-6}
-                  opacity={0.15}
-                  zIndex={0}
-                  pointerEvents="none"
-                />
-                <Text fontWeight="bold" fontSize="2xl" color="blue.700" mb={1} zIndex={1} position="relative">
-                  Share Patient Blood Draw Form
-                </Text>
-                <Text fontSize="md" color="gray.600" mb={4} zIndex={1} position="relative">
-                  Use this tool to generate a unique link for your patient to complete their blood draw form online.<br/>
-                  <b>When to use:</b> Before a scheduled blood draw, send this link to your patient so they can enter their information and upload required documents in advance.<br/>
-                  <b>How to share:</b> Enter the patient's email below and click the share button. Copy the generated link and send it to your patient via email, text, or any secure messaging platform.
-                </Text>
-                <Box my={4}>
-                  <Box borderBottomWidth={1} borderColor="gray.200" />
-                </Box>
-                <HStack spacing={2} zIndex={1} position="relative">
-                  <Input
-                    placeholder="Enter patient email"
-                    value={patientEmailForShare}
-                    onChange={e => setPatientEmailForShare(e.target.value)}
-                    size="lg"
-                    borderRadius="xl"
-                    boxShadow="sm"
-                    bg="gray.50"
-                    _focus={{ borderColor: 'blue.400', boxShadow: '0 0 0 2px #90cdf4' }}
-                  />
-                  <IconButton
-                    icon={<FaShareAlt />}
-                    colorScheme="blue"
-                    aria-label="Share patient form"
-                    isDisabled={!patientEmailForShare}
-                    size="lg"
-                    borderRadius="xl"
-                    boxShadow="sm"
-                    _hover={{ bg: 'blue.500' }}
-                    onClick={async () => {
-                      setShowShareLink(true);
-                      const link = `${window.location.origin}/lab/${id}/patient/${encodeURIComponent(patientEmailForShare)}`;
-                      navigator.clipboard.writeText(link);
-                      setCopied(true);
-                      setTimeout(() => setCopied(false), 1500);
-                      // Save to Supabase
-                      const { error } = await supabase.from('upcoming_draws').insert([
-                        { lab_id: id, patient_email: patientEmailForShare, status: 'upcoming', created_at: new Date().toISOString() }
-                      ]);
-                      if (error) toast({ title: 'Error saving upcoming draw', description: error.message, status: 'error' });
-                    }}
-                  />
-                </HStack>
-                {showShareLink && patientEmailForShare && (
-                  <Box mt={4} zIndex={1} position="relative">
-                    <Text fontSize="sm" color="gray.500" mb={1}>Share this link with the patient:</Text>
-                    <HStack>
-                      <Input
-                        value={`${window.location.origin}/lab/${id}/patient/${encodeURIComponent(patientEmailForShare)}`}
-                        isReadOnly
-                        size="md"
-                        borderRadius="xl"
-                        bg="gray.50"
-                        boxShadow="sm"
-                      />
-                      <Button
-                        size="md"
-                        colorScheme={copied ? 'green' : 'blue'}
-                        borderRadius="xl"
-                        boxShadow="sm"
-                        onClick={() => {
-                          navigator.clipboard.writeText(`${window.location.origin}/lab/${id}/patient/${encodeURIComponent(patientEmailForShare)}`);
-                          setCopied(true);
-                          setTimeout(() => setCopied(false), 1500);
-                        }}
-                        transition="all 0.2s"
-                      >
-                        {copied ? (
-                          <Box as="span" animation="fadeIn 0.3s">Copied!</Box>
-                        ) : (
-                          'Copy'
-                        )}
-                      </Button>
-                    </HStack>
-                  </Box>
-                )}
-              </Box>
-            )
-          )}
-          {/* The rest of the form/page content always visible below */}
-          <HStack spacing={4} mb={8} justify="center">
-            {steps.map((step, index) => {
-              if (isPatientMode && step.label === 'Delivery') return null;
-              return (
-                <Box key={step.label} textAlign="center">
-                  <Icon as={step.icon} color={index <= step ? "blue.400" : "gray.600"} boxSize={6} />
-                  <Text mt={2} color={index <= step ? "blue.400" : "gray.500"}>{step.label}</Text>
-                </Box>
-              );
-            })}
-          </HStack>
-          {/* Save indicator */}
-          <Box mb={2} minH="28px">
-            {saving ? (
-              <HStack color="blue.500" fontWeight="medium" fontSize="sm">
-                <Spinner size="xs" /> Saving...
-              </HStack>
-            ) : saveError ? (
-              <HStack color="red.500" fontWeight="medium" fontSize="sm">
-                <WarningIcon boxSize={4} /> Error saving: {saveError}
-              </HStack>
-            ) : submissionId ? (
-              <HStack color="green.500" fontWeight="medium" fontSize="sm">
-                <CheckCircleIcon boxSize={4} /> Saved
-              </HStack>
-            ) : null}
-          </Box>
-          <Box
-            bg="white"
-            p={8}
-            borderRadius="xl"
-            boxShadow="xl"
-            borderWidth="1px"
-            borderColor="gray.700"
-          >
-            <form onSubmit={handleSubmit}>
-              {renderStep()}
-              {renderStepNavigation()}
-            </form>
-          </Box>
-          {message && (
-            <Box
-              mt={4}
-              p={4}
-              borderRadius="md"
-              bg={message.type === 'success' ? 'green.100' : 'red.100'}
-              color={message.type === 'success' ? 'green.700' : 'red.700'}
+          {/* Dropzones */}
+          <Box>
+            <Text fontSize="xl" fontWeight="bold" mb={2}>Doctor's Script</Text>
+            <DropZone
+              label="Upload Doctor's Script"
+              file={form.scriptImage}
+              setFile={(file) => {
+                setForm((f) => ({ ...f, scriptImage: file }));
+                handleImageUpload(file, 'script');
+              }}
+              preview={scriptPreview}
+              setPreview={setScriptPreview}
+              mb={4}
+            />
+            {/* Move Patient/Doctor/Lab Info here */}
+            <Button
+              onClick={() => setShowPatientDoctorLab((v) => !v)}
+              leftIcon={<FaChevronRight style={{ transform: showPatientDoctorLab ? 'rotate(90deg)' : 'none', transition: '0.2s' }} />}
+              variant="outline"
+              colorScheme="blue"
+              mb={2}
+              w="100%"
+              justifyContent="flex-start"
             >
-              {message.text}
-            </Box>
-          )}
+              {showPatientDoctorLab ? 'Hide' : 'Add/Update'} Patient, Doctor, and Lab Info
+            </Button>
+            <Collapse in={showPatientDoctorLab} animateOpacity>
+              <Box p={4} bg="gray.50" borderRadius="md" boxShadow="sm">
+                {/* Patient, Doctor, Lab fields */}
+                <Grid templateColumns={'1fr'} gap={6}>
+                  <GridItem>
+                    <FloatingInput label="Patient Name" id="patientName" name="patientName" value={form.patientName} onChange={handleChange} />
+                  </GridItem>
+                  <GridItem>
+                    <FloatingInput label="Patient Address" id="patientAddress" name="patientAddress" value={form.patientAddress} onChange={handleChange} />
+                  </GridItem>
+                  <GridItem>
+                    <FloatingInput label="Patient Email" id="patientEmail" name="patientEmail" type="email" value={form.patientEmail} onChange={handleChange} />
+                  </GridItem>
+                  <GridItem>
+                    <FloatingInput label="Patient Date of Birth" id="patientDOB" name="patientDOB" type="date" value={form.patientDOB} onChange={handleChange} />
+                  </GridItem>
+                  <GridItem>
+                    <FloatingInput label="Doctor Name" id="doctorName" name="doctorName" value={form.doctorName} onChange={handleChange} />
+                  </GridItem>
+                  <GridItem>
+                    <FloatingInput label="Doctor Address" id="doctorAddress" name="doctorAddress" value={form.doctorAddress} onChange={handleChange} />
+                  </GridItem>
+                  <GridItem>
+                    <FloatingInput label="Doctor Phone" id="doctorPhone" name="doctorPhone" type="tel" value={form.doctorPhone} onChange={handleChange} />
+                  </GridItem>
+                  <GridItem>
+                    <FloatingInput label="Doctor Fax" id="doctorFax" name="doctorFax" type="tel" value={form.doctorFax} onChange={handleChange} />
+                  </GridItem>
+                  <GridItem>
+                    <FloatingInput label="Doctor Email" id="doctorEmail" name="doctorEmail" type="email" value={form.doctorEmail} onChange={handleChange} />
+                  </GridItem>
+                  <GridItem>
+                    <FormControl>
+                      <FormLabel>Lab Brand</FormLabel>
+                      <Select name="labBrand" value={form.labBrand} onChange={handleChange} placeholder="Select lab brand">
+                        {labOptions.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </GridItem>
+                  <GridItem>
+                    <FloatingInput label="Blood Collection Time" id="bloodCollectionTime" name="bloodCollectionTime" type="datetime-local" value={form.bloodCollectionTime} onChange={handleChange} />
+                  </GridItem>
+                  <GridItem>
+                    <FormControl>
+                      <FormLabel>Special Instructions</FormLabel>
+                      <Input as="textarea" name="specialInstructions" value={form.specialInstructions || ''} onChange={handleChange} placeholder="Any special instructions..." />
+                    </FormControl>
+                  </GridItem>
+                </Grid>
+              </Box>
+            </Collapse>
+          </Box>
+          <Box mt={6}>
+            <Text fontSize="xl" fontWeight="bold" mb={2}>Insurance Card</Text>
+            <DropZone
+              label="Upload Insurance Card"
+              file={form.insuranceCardImage}
+              setFile={(file) => {
+                setForm((f) => ({ ...f, insuranceCardImage: file }));
+                handleImageUpload(file, 'insurance');
+              }}
+              preview={insurancePreview}
+              setPreview={setInsurancePreview}
+            />
+          </Box>
+          <Box>
+            <Button
+              onClick={() => setShowInsuranceInfo((v) => !v)}
+              leftIcon={<FaChevronRight style={{ transform: showInsuranceInfo ? 'rotate(90deg)' : 'none', transition: '0.2s' }} />}
+              variant="outline"
+              colorScheme="blue"
+              mb={2}
+              w="100%"
+              justifyContent="flex-start"
+            >
+              {showInsuranceInfo ? 'Hide' : 'Add/Update'} Insurance Info
+            </Button>
+            <Collapse in={showInsuranceInfo} animateOpacity>
+              <Box p={4} bg="gray.50" borderRadius="md" boxShadow="sm">
+                <Grid templateColumns={'1fr'} gap={6}>
+                  <GridItem>
+                    <FloatingInput label="Insurance Provider" id="insuranceProvider" name="insuranceProvider" value={form.insuranceProvider} onChange={handleChange} />
+                  </GridItem>
+                  <GridItem>
+                    <FloatingInput label="Policy Number" id="policyNumber" name="policyNumber" value={form.policyNumber} onChange={handleChange} />
+                  </GridItem>
+                  <GridItem>
+                    <FloatingInput label="Group Number" id="groupNumber" name="groupNumber" value={form.groupNumber} onChange={handleChange} />
+                  </GridItem>
+                  <GridItem>
+                    <FloatingInput label="Member ID" id="memberId" name="memberId" value={form.memberId} onChange={handleChange} />
+                  </GridItem>
+                  <GridItem>
+                    <FloatingInput label="Insurance Phone" id="insurancePhone" name="insurancePhone" type="tel" value={form.insurancePhone} onChange={handleChange} />
+                  </GridItem>
+                  <GridItem>
+                    <FloatingInput label="Insurance Email" id="insuranceEmail" name="insuranceEmail" type="email" value={form.insuranceEmail} onChange={handleChange} />
+                  </GridItem>
+                  <GridItem>
+                    <FloatingInput label="Insurance Address" id="insuranceAddress" name="insuranceAddress" value={form.insuranceAddress} onChange={handleChange} />
+                  </GridItem>
+                  <GridItem>
+                    <FloatingInput label="Insurance Fax" id="insuranceFax" name="insuranceFax" type="tel" value={form.insuranceFax} onChange={handleChange} />
+                  </GridItem>
+                  <GridItem>
+                    <FloatingInput label="Insurance Website" id="insuranceWebsite" name="insuranceWebsite" type="url" value={form.insuranceWebsite} onChange={handleChange} />
+                  </GridItem>
+                  <GridItem>
+                    <FloatingInput label="Insurance Notes" id="insuranceNotes" name="insuranceNotes" value={form.insuranceNotes} onChange={handleChange} />
+                  </GridItem>
+                </Grid>
+              </Box>
+            </Collapse>
+          </Box>
+          <Box mt={8}>
+            <Text mb={2} fontSize="xl" fontWeight="bold" color="blue.700">
+              Do you need a FedEx label for this blood draw?
+            </Text>
+            <HStack spacing={4} mb={4}>
+              <Button
+                colorScheme={needFedexLabelChoice === true ? 'blue' : 'gray'}
+                variant={needFedexLabelChoice === true ? 'solid' : 'outline'}
+                onClick={() => setNeedFedexLabelChoice(true)}
+              >
+                Yes, I need a label
+              </Button>
+              <Button
+                colorScheme={needFedexLabelChoice === false ? 'gray' : 'blue'}
+                variant={needFedexLabelChoice === false ? 'solid' : 'outline'}
+                onClick={() => setNeedFedexLabelChoice(false)}
+              >
+                No, I don't need one (Skip)
+              </Button>
+            </HStack>
+            {needFedexLabelChoice === false && (
+              <Box p={4} bg="green.50" borderRadius="md" mt={2}>
+                <Text color="green.700" fontWeight="medium">You chose to skip requesting a FedEx label. You can always request one later if needed.</Text>
+              </Box>
+            )}
+            {needFedexLabelChoice === true && (
+              <Box mt={6}>
+                <Text mb={4} color="gray.600">
+                  Please choose a SHIP FROM address from this list below or add a new one
+                </Text>
+                <Grid templateColumns={'1fr'} gap={6}>
+                  <GridItem>
+                    <FormControl>
+                      <FormLabel>Choose Previously Used Address</FormLabel>
+                      <Select
+                        name="deliveryTemplate"
+                        value={selectedAddress}
+                        onChange={e => setSelectedAddress(e.target.value)}
+                        placeholder="Select delivery template"
+                      >
+                        {deliveryTemplates.map((template) => (
+                          <option key={template.id} value={`${template.address_line1}, ${template.city}, ${template.state} ${template.zip}`}>
+                            {template.address_line1}, {template.city}, {template.state} {template.zip}
+                          </option>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </GridItem>
+                  <GridItem>
+                    <Text fontSize="md" fontWeight="medium" color="blue.400">Add New Address</Text>
+                  </GridItem>
+                  <GridItem>
+                    <FloatingInput
+                      label="Address Line 1"
+                      id="addressLine1"
+                      name="addressLine1"
+                      value={form.addressLine1}
+                      onChange={handleChange}
+                      placeholder="Start typing to auto-fill"
+                    />
+                  </GridItem>
+                  <GridItem>
+                    <FloatingInput
+                      label="City"
+                      id="city"
+                      name="city"
+                      value={form.city}
+                      onChange={handleChange}
+                    />
+                  </GridItem>
+                  <GridItem>
+                    <FloatingInput
+                      label="State"
+                      id="state"
+                      name="state"
+                      value={form.state}
+                      onChange={handleChange}
+                    />
+                  </GridItem>
+                  <GridItem>
+                    <FloatingInput
+                      label="Zip"
+                      id="zip"
+                      name="zip"
+                      value={form.zip}
+                      onChange={handleChange}
+                    />
+                  </GridItem>
+                  <GridItem>
+                    <Button colorScheme="blue" onClick={handleSavePickupAddress}>
+                      Save Pickup Address
+                    </Button>
+                    {saveConfirmation && (
+                      <Text color="green.500" mt={2}>Address saved successfully!</Text>
+                    )}
+                  </GridItem>
+                  <GridItem>
+                    <FormControl>
+                      <FormLabel>Past Requests</FormLabel>
+                      <Table variant="simple">
+                        <Thead>
+                          <Tr>
+                            <Th>Date</Th>
+                            <Th>Status</Th>
+                            <Th>Label</Th>
+                            <Th>Address</Th>
+                          </Tr>
+                        </Thead>
+                        <Tbody>
+                          {pastRequests.map((request) => (
+                            <Tr key={request.id}>
+                              <Td>{new Date(request.requested_at).toLocaleString()}</Td>
+                              <Td>{request.status}</Td>
+                              <Td>
+                                {request.label_url ? (
+                                  <Button size="sm" colorScheme="blue" as="a" href={request.label_url} target="_blank">Download</Button>
+                                ) : (
+                                  <Text color="gray.500" fontSize="sm">Label not uploaded yet. Please check back soon.</Text>
+                                )}
+                              </Td>
+                              <Td>{request.address}</Td>
+                            </Tr>
+                          ))}
+                        </Tbody>
+                      </Table>
+                    </FormControl>
+                  </GridItem>
+                </Grid>
+              </Box>
+            )}
+          </Box>
+          {/* Complete button */}
+          <Button
+            colorScheme="blue"
+            size="lg"
+            onClick={handleSubmit}
+            isDisabled={!(form.scriptImage || form.insuranceCardImage || form.patientName || form.patientEmail)}
+          >
+            Complete
+          </Button>
         </VStack>
       </Container>
     </Box>

@@ -88,22 +88,22 @@ export default function AdminPanel() {
                       {submissions.map((s) => (
                         <Tr key={s.id || s.submitted_at}>
                           <Td>{s.submitted_at ? new Date(s.submitted_at).toLocaleString() : ''}</Td>
-                          <Td>{s.patientName}</Td>
-                          <Td>{s.patientAddress}</Td>
-                          <Td>{s.patientEmail}</Td>
-                          <Td>{s.patientDOB}</Td>
-                          <Td>{s.doctorName}</Td>
-                          <Td>{s.doctorAddress}</Td>
-                          <Td>{s.doctorPhone}</Td>
-                          <Td>{s.doctorFax}</Td>
-                          <Td>{s.doctorEmail}</Td>
-                          <Td>{s.labBrand}</Td>
-                          <Td>{s.bloodCollectionTime}</Td>
-                          <Td>{s.insuranceCompany}</Td>
-                          <Td>{s.insurancePolicyNumber}</Td>
-                          <Td>{s.needFedexLabel ? 'Yes' : 'No'}</Td>
-                          <Td>{s.fedexShipFrom}</Td>
-                          <Td>{s.statTest ? 'Yes' : 'No'}</Td>
+                          <Td>{s.patient_name}</Td>
+                          <Td>{s.patient_address}</Td>
+                          <Td>{s.patient_email}</Td>
+                          <Td>{s.patient_dob}</Td>
+                          <Td>{s.doctor_name}</Td>
+                          <Td>{s.doctor_address}</Td>
+                          <Td>{s.doctor_phone}</Td>
+                          <Td>{s.doctor_fax}</Td>
+                          <Td>{s.doctor_email}</Td>
+                          <Td>{s.lab_brand}</Td>
+                          <Td>{s.blood_collection_time}</Td>
+                          <Td>{s.insurance_company}</Td>
+                          <Td>{s.insurance_policy_number}</Td>
+                          <Td>{s.need_fedex_label ? 'Yes' : 'No'}</Td>
+                          <Td>{s.fedex_ship_from}</Td>
+                          <Td>{s.stat_test ? 'Yes' : 'No'}</Td>
                         </Tr>
                       ))}
                     </Tbody>

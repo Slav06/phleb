@@ -29,6 +29,7 @@ import {
   NumberIncrementStepper,
   NumberDecrementStepper,
   HStack,
+  Heading,
 } from '@chakra-ui/react';
 import { EditIcon, DeleteIcon, AddIcon, CopyIcon, CheckIcon } from '@chakra-ui/icons';
 import { supabase } from '../../supabaseClient';
@@ -266,79 +267,146 @@ const PhlebotomistManagement = () => {
   };
 
   return (
-    <Box p={4}>
+    <Box w="100vw" maxW="100vw" px={0} py={2} overflowX="auto" bg="white">
+      <Heading mb={2} size="md" textAlign="left">Mobile Labs</Heading>
       <Button colorScheme="blue" mb={4} onClick={onOpen}>
         Add New Mobile Lab
       </Button>
 
-      <Table variant="simple">
-        <Thead>
-          <Tr>
-            <Th>Name</Th>
-            <Th>Company</Th>
-            <Th>Email</Th>
-            <Th>Phone</Th>
-            <Th>Draw Fee Range</Th>
-            <Th>Service Areas</Th>
-            <Th>Portal Link</Th>
-            <Th>Actions</Th>
-          </Tr>
-        </Thead>
-        <Tbody>
+      {/* Desktop Table */}
+      <Box display={{ base: 'none', md: 'block' }}>
+        <Table variant="unstyled" size="sm" width="100%" style={{ tableLayout: 'auto', borderCollapse: 'collapse' }}>
+          <Thead>
+            <Tr bg="blue.700">
+              <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Name</Th>
+              <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Company</Th>
+              <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Email</Th>
+              <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Phone</Th>
+              <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Draw Fee Range</Th>
+              <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Service Areas</Th>
+              <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Portal Link</Th>
+              <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Actions</Th>
+            </Tr>
+          </Thead>
+          <Tbody>
+            {phlebotomists.map((phlebotomist, idx) => (
+              <Tr key={phlebotomist.id}
+                bg={idx % 2 === 0 ? 'white' : 'gray.100'}
+                _hover={{ bg: 'blue.50' }}
+              >
+                <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">{phlebotomist.full_name}</Td>
+                <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">{phlebotomist.company_name}</Td>
+                <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">{phlebotomist.email}</Td>
+                <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">{phlebotomist.phone}</Td>
+                <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">${phlebotomist.min_draw_fee} - ${phlebotomist.max_draw_fee}</Td>
+                <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">
+                  {phlebotomist.service_areas?.map((area, index) => (
+                    <Text key={index}>
+                      {area.zip_code} ({area.radius} miles)
+                    </Text>
+                  ))}
+                </Td>
+                <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">
+                  <HStack justify="center">
+                    <Button
+                      size="sm"
+                      leftIcon={copiedId === phlebotomist.id ? <CheckIcon /> : <CopyIcon />}
+                      onClick={() => {
+                        navigator.clipboard.writeText(`${window.location.origin}/lab/${phlebotomist.id}`);
+                        setCopiedId(phlebotomist.id);
+                        setTimeout(() => setCopiedId(null), 1500);
+                        toast({
+                          title: 'Link copied!',
+                          description: 'Portal link copied to clipboard',
+                          status: 'success',
+                          duration: 2000,
+                          isClosable: true,
+                        });
+                      }}
+                    >
+                      {copiedId === phlebotomist.id ? 'Copied!' : 'Copy Link'}
+                    </Button>
+                  </HStack>
+                </Td>
+                <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">
+                  <HStack justify="center">
+                    <IconButton
+                      icon={<EditIcon />}
+                      mr={2}
+                      onClick={() => handleEdit(phlebotomist)}
+                      aria-label="Edit mobile lab"
+                    />
+                    <IconButton
+                      icon={<DeleteIcon />}
+                      colorScheme="red"
+                      onClick={() => handleDelete(phlebotomist.id)}
+                      aria-label="Delete mobile lab"
+                    />
+                  </HStack>
+                </Td>
+              </Tr>
+            ))}
+          </Tbody>
+        </Table>
+      </Box>
+
+      {/* Mobile View */}
+      <Box display={{ base: 'block', md: 'none' }}>
+        <VStack spacing={4} align="stretch">
           {phlebotomists.map((phlebotomist) => (
-            <Tr key={phlebotomist.id}>
-              <Td>{phlebotomist.full_name}</Td>
-              <Td>{phlebotomist.company_name}</Td>
-              <Td>{phlebotomist.email}</Td>
-              <Td>{phlebotomist.phone}</Td>
-              <Td>${phlebotomist.min_draw_fee} - ${phlebotomist.max_draw_fee}</Td>
-              <Td>
-                {phlebotomist.service_areas?.map((area, index) => (
-                  <Text key={index}>
-                    {area.zip_code} ({area.radius} miles)
-                  </Text>
-                ))}
-              </Td>
-              <Td>
+            <Box key={phlebotomist.id} p={4} borderWidth="1px" borderRadius="md" bg="white" boxShadow="sm">
+              <VStack align="start" spacing={2}>
+                <Text fontWeight="bold" fontSize="lg">{phlebotomist.full_name}</Text>
+                <Text>{phlebotomist.company_name}</Text>
+                <Text>{phlebotomist.email}</Text>
+                <Text>{phlebotomist.phone}</Text>
+                <Text>Draw Fee: ${phlebotomist.min_draw_fee} - ${phlebotomist.max_draw_fee}</Text>
+                <Box>
+                  <Text fontWeight="bold">Service Areas:</Text>
+                  {phlebotomist.service_areas?.map((area, index) => (
+                    <Text key={index}>
+                      {area.zip_code} ({area.radius} miles)
+                    </Text>
+                  ))}
+                </Box>
                 <HStack>
-                  <a
-                    href={`/lab/${phlebotomist.id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ color: '#3182ce', textDecoration: 'underline', fontSize: '0.9em' }}
-                  >
-                    /lab/{phlebotomist.id}
-                  </a>
-                  <IconButton
+                  <Button
                     size="sm"
-                    icon={copiedId === phlebotomist.id ? <CheckIcon /> : <CopyIcon />}
-                    aria-label="Copy link"
+                    leftIcon={copiedId === phlebotomist.id ? <CheckIcon /> : <CopyIcon />}
                     onClick={() => {
                       navigator.clipboard.writeText(`${window.location.origin}/lab/${phlebotomist.id}`);
                       setCopiedId(phlebotomist.id);
                       setTimeout(() => setCopiedId(null), 1500);
+                      toast({
+                        title: 'Link copied!',
+                        description: 'Portal link copied to clipboard',
+                        status: 'success',
+                        duration: 2000,
+                        isClosable: true,
+                      });
                     }}
+                  >
+                    {copiedId === phlebotomist.id ? 'Copied!' : 'Copy Link'}
+                  </Button>
+                </HStack>
+                <HStack>
+                  <IconButton
+                    icon={<EditIcon />}
+                    onClick={() => handleEdit(phlebotomist)}
+                    aria-label="Edit mobile lab"
+                  />
+                  <IconButton
+                    icon={<DeleteIcon />}
+                    colorScheme="red"
+                    onClick={() => handleDelete(phlebotomist.id)}
+                    aria-label="Delete mobile lab"
                   />
                 </HStack>
-              </Td>
-              <Td>
-                <IconButton
-                  icon={<EditIcon />}
-                  mr={2}
-                  onClick={() => handleEdit(phlebotomist)}
-                  aria-label="Edit mobile lab"
-                />
-                <IconButton
-                  icon={<DeleteIcon />}
-                  colorScheme="red"
-                  onClick={() => handleDelete(phlebotomist.id)}
-                  aria-label="Delete mobile lab"
-                />
-              </Td>
-            </Tr>
+              </VStack>
+            </Box>
           ))}
-        </Tbody>
-      </Table>
+        </VStack>
+      </Box>
 
       <Modal isOpen={isOpen} onClose={onClose} size="xl">
         <ModalOverlay />

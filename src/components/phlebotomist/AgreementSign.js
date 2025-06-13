@@ -1,51 +1,84 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Box, Heading, Text, VStack, FormControl, FormLabel, Input, Button, useToast } from '@chakra-ui/react';
+import { Box, Heading, Text, VStack, FormControl, FormLabel, Input, Button, useToast, HStack, VisuallyHidden } from '@chakra-ui/react';
 import SignatureCanvas from 'react-signature-canvas';
 import jsPDF from 'jspdf';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
+import { supabase } from '../../supabaseClient';
 
-export default function AgreementSign({ labInfo }) {
+export default function AgreementSign() {
   const [companyName, setCompanyName] = useState('');
   const [printedName, setPrintedName] = useState('');
   const [signDate, setSignDate] = useState('');
   const sigPad = useRef();
   const toast = useToast();
   const navigate = useNavigate();
+  const { id } = useParams();
   const [isSigned, setIsSigned] = useState(false);
+  const [labInfo, setLabInfo] = useState(null);
 
   useEffect(() => {
-    // Do not pre-fill the date; leave it blank so the user must select it
-    if (labInfo && labInfo.company_name) setCompanyName(labInfo.company_name);
-  }, [labInfo]);
+    // Fetch lab info from Supabase
+    const fetchLabInfo = async () => {
+      if (!id) return;
+      const { data, error } = await supabase
+        .from('phlebotomist_profiles')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (error) {
+        toast({ title: 'Error loading lab info', description: error.message, status: 'error' });
+        return;
+      }
+      setLabInfo(data);
+      if (data && data.company_name) setCompanyName(data.company_name);
+    };
+    fetchLabInfo();
+  }, [id, toast]);
 
   const handleSign = async () => {
-    const pdf = new jsPDF();
-    pdf.setFontSize(10);
-    pdf.text('MOBILE PHLEBOTOMY CONTRACTOR AGREEMENT', 10, 10);
-    pdf.setFontSize(8);
-    pdf.text(`Company Name: ${companyName}`, 10, 20);
-    pdf.text(`Printed Name/Title: ${printedName}`, 10, 25);
-    pdf.text(`Date: ${signDate}`, 10, 30);
-    pdf.text('Signature:', 10, 35);
+    console.log('handleSign called', { companyName, printedName, signDate, isSigned });
+    console.log('labInfo:', labInfo);
+    console.log('labInfo.id:', labInfo?.id);
+    // Generate the signature image (for possible future use, but do not download PDF)
+    let sigData = null;
     if (sigPad.current) {
-      const sigData = sigPad.current.getCanvas().toDataURL('image/png');
-      pdf.addImage(sigData, 'PNG', 40, 28, 50, 20);
+      sigData = sigPad.current.getCanvas().toDataURL('image/png');
     }
-    pdf.text('---', 10, 55);
-    pdf.setFontSize(7);
-    pdf.text(`Agreement:`, 10, 60);
-    pdf.setFontSize(6);
-    pdf.text(`(See attached full agreement text)`, 10, 65);
-    pdf.save('MobilePhlebotomyAgreement.pdf');
-    localStorage.setItem('agreement_signed', 'true');
-    toast({ title: 'Agreement signed!', status: 'success' });
-    navigate(`/lab/${labInfo?.id || ''}`);
+    // Save agreement_signed to the database
+    if (labInfo && labInfo.id) {
+      try {
+        const { error, data } = await supabase
+          .from('phlebotomist_profiles')
+          .update({
+            agreement_signed: true,
+            agreement_signed_at: new Date().toISOString(),
+            agreement_company_name: companyName,
+            agreement_printed_name: printedName,
+            agreement_date: signDate,
+            agreement_signature: sigData
+          })
+          .eq('id', labInfo.id);
+        console.log('Supabase update result', { error, data });
+        if (error) {
+          toast({ title: 'Error saving agreement', description: error.message, status: 'error' });
+          return;
+        }
+        toast({ title: 'Agreement signed!', status: 'success' });
+        // Add a delay before navigating to allow Supabase to propagate the update
+        setTimeout(() => {
+          navigate(`/lab/${labInfo.id}`);
+        }, 800);
+      } catch (err) {
+        console.error('Unexpected error in handleSign:', err);
+        toast({ title: 'Unexpected error', description: err.message, status: 'error' });
+      }
+    }
   };
 
   return (
-    <Box maxW="700px" mx="auto" mt={8} p={8} bg="white" borderRadius="xl" boxShadow="xl">
-      <Heading size="lg" mb={4}>Sign Business Agreement</Heading>
-      <Box maxH="300px" overflowY="auto" mb={4} p={2} borderWidth="1px" borderRadius="md" bg="gray.50">
+    <Box maxW="700px" mx="auto" mt={8} p={6} bg="white" borderRadius="xl" boxShadow="xl">
+      <Heading size="lg" mb={3}>Sign Business Agreement</Heading>
+      <Box maxH="300px" overflowY="auto" mb={3} p={2} borderWidth="1px" borderRadius="md" bg="gray.50">
         <Text fontSize="md" fontWeight="bold" mb={2}>MOBILE PHLEBOTOMY CONTRACTOR AGREEMENT</Text>
         <Text fontSize="sm" mb={2}>
           This MOBILE PHLEBOTOMY CONTRACTOR AGREEMENT (“Agreement”) is made effective on <b>{signDate}</b> (“Effective Date”) between <b>QUALITY LABORATORY</b>, a New Jersey limited liability company (“Contractor”) and <b>{companyName || '_____________________'}</b> (“Company”).
@@ -72,39 +105,46 @@ export default function AgreementSign({ labInfo }) {
           Date: {signDate}
         </Text>
       </Box>
-      <VStack align="start" spacing={4}>
-        <FormControl isRequired>
-          <FormLabel>Company Name</FormLabel>
-          <Input value={companyName} onChange={e => setCompanyName(e.target.value)} />
-        </FormControl>
-        <FormControl isRequired>
-          <FormLabel>Printed Name/Title</FormLabel>
-          <Input value={printedName} onChange={e => setPrintedName(e.target.value)} placeholder="Name / Title" autoComplete="off" />
-        </FormControl>
-        <FormControl isRequired>
-          <FormLabel>Date</FormLabel>
-          <Input type="date" value={signDate} onChange={e => setSignDate(e.target.value)} />
-        </FormControl>
-        <FormControl isRequired>
-          <FormLabel>Signature</FormLabel>
-          <Box border="1px solid #ccc" borderRadius="md" p={2}>
-            <SignatureCanvas
-              penColor="black"
-              canvasProps={{ width: 400, height: 100, className: 'sigCanvas' }}
-              ref={sigPad}
-              onEnd={() => setIsSigned(!sigPad.current.isEmpty())}
-              onClear={() => setIsSigned(false)}
-            />
+      <VStack align="start" spacing={1} mt={2}>
+        <HStack width="100%" spacing={2} align="start">
+          <FormControl isRequired mb={0} flex={1}>
+            <FormLabel fontSize="sm" mb={0.5}>Company Name</FormLabel>
+            <Input size="sm" value={companyName} onChange={e => setCompanyName(e.target.value)} />
+          </FormControl>
+          <FormControl isRequired mb={0} flex={1}>
+            <FormLabel fontSize="sm" mb={0.5}>Printed Name/Title</FormLabel>
+            <Input size="sm" value={printedName} onChange={e => setPrintedName(e.target.value)} placeholder="Name / Title" autoComplete="off" />
+          </FormControl>
+        </HStack>
+        <HStack width="100%" spacing={2} alignItems="flex-end" justifyContent="space-between">
+          <Box flex={2} display="flex" flexDirection="column" alignItems="flex-start">
+            <FormLabel fontSize="sm" mb={0.5}>Signature</FormLabel>
+            <Box borderBottom="2px solid #ccc" borderRadius={0} p={0} display="inline-block" minW="500px">
+              <SignatureCanvas
+                penColor="black"
+                canvasProps={{ width: 500, height: 100, className: 'sigCanvas' }}
+                ref={sigPad}
+                onEnd={() => setIsSigned(!sigPad.current.isEmpty())}
+                onClear={() => setIsSigned(false)}
+              />
+            </Box>
+            <Button mt={1} size="xs" onClick={() => sigPad.current && sigPad.current.clear()}>Clear</Button>
           </Box>
-          <Button mt={2} size="sm" onClick={() => sigPad.current && sigPad.current.clear()}>Clear</Button>
-        </FormControl>
+          <Box flex={1} display="flex" flexDirection="column" alignItems="flex-end" justifyContent="center" height="100%">
+            <FormLabel fontSize="sm" mb={0.5}>Date</FormLabel>
+            <Input size="sm" type="date" value={signDate} onChange={e => setSignDate(e.target.value)} width="120px" height="40px" />
+          </Box>
+        </HStack>
         {(!companyName || !printedName || !signDate || !isSigned) && (
-          <Text color="red.500" fontSize="sm" mt={2}>
+          <Text color="red.500" fontSize="xs" mt={1}>
             Please fill all fields and sign to continue.
           </Text>
         )}
         <Button
           colorScheme="blue"
+          size="sm"
+          width="100%"
+          mt={1}
           onClick={handleSign}
           isDisabled={
             !companyName ||
@@ -113,7 +153,7 @@ export default function AgreementSign({ labInfo }) {
             !isSigned
           }
         >
-          Complete & Download PDF
+          Complete Agreement
         </Button>
       </VStack>
     </Box>

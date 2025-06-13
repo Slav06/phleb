@@ -69,9 +69,6 @@ const PhlebotomistDashboard = () => {
       fetchPatientDraws();
       fetchPastSubmissions();
     }
-    if (typeof window !== 'undefined' && localStorage.getItem('agreement_signed') !== 'true') {
-      navigate(`/lab/${id}/agreement`);
-    }
     // eslint-disable-next-line
   }, [id, navigate]);
 

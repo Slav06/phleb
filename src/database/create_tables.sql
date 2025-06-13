@@ -97,4 +97,14 @@ create table if not exists public.submissions (
   fedex_ship_from text,
   stat_test boolean default false,
   submitted_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Create fedex_label_requests table
+create table if not exists public.fedex_label_requests (
+  id uuid default uuid_generate_v4() primary key,
+  submission_id uuid references public.submissions(id) on delete cascade not null,
+  address text not null,
+  requested_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  status text default 'pending',
+  label_url text
 ); 
