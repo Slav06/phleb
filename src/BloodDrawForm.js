@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FaUser, FaStethoscope, FaVial, FaShieldAlt, FaTruck, FaChevronLeft, FaChevronRight, FaCloudUploadAlt, FaTimes, FaShareAlt } from 'react-icons/fa';
+import { FaUser, FaStethoscope, FaVial, FaShieldAlt, FaTruck, FaChevronLeft, FaChevronRight, FaCloudUploadAlt, FaTimes, FaShareAlt, FaIdCard, FaAddressCard } from 'react-icons/fa';
 import {
   Box,
   VStack,
@@ -73,7 +73,7 @@ const steps = [
 ];
 
 // DropZone component for drag-and-drop file upload with glassmorphism, animation, and remove button
-const DropZone = ({ label, file, setFile, preview, setPreview, mb }) => {
+const DropZone = ({ label, file, setFile, preview, setPreview, mb, icon }) => {
   const inputRef = React.useRef();
   const [dragActive, setDragActive] = useState(false);
   const bgColor = useColorModeValue('white', 'gray.800');
@@ -139,7 +139,7 @@ const DropZone = ({ label, file, setFile, preview, setPreview, mb }) => {
         mb={mb}
       >
         <VStack spacing={4}>
-          <Icon as={FaCloudUploadAlt} boxSize={12} color="blue.400" />
+          <Icon as={icon || FaCloudUploadAlt} boxSize={12} color="blue.400" />
           <Text color="gray.500">Click or drag & drop to upload</Text>
           <input
             ref={inputRef}
@@ -272,6 +272,8 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
   const [needFedexLabelChoice, setNeedFedexLabelChoice] = useState(null);
   const [showPatientDoctorLab, setShowPatientDoctorLab] = useState(false);
   const [showInsuranceInfo, setShowInsuranceInfo] = useState(false);
+  const [patientIdPreview, setPatientIdPreview] = useState(null);
+  const [showPatientInfo, setShowPatientInfo] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -396,6 +398,9 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
     } else if (type === 'insurance') {
       bucket = 'insurance-cards';
       column = 'insurance_card_url';
+    } else if (type === 'patient-id') {
+      bucket = 'patient-ids';
+      column = 'patient_id_url';
     } else {
       return;
     }
@@ -550,6 +555,7 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
                 preview={scriptPreview}
                 setPreview={setScriptPreview}
                 mb={4}
+                icon={FaStethoscope}
               />
               {/* Move Patient/Doctor/Lab Info here */}
               <Button
@@ -561,24 +567,11 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
                 w="100%"
                 justifyContent="flex-start"
               >
-                {showPatientDoctorLab ? 'Hide' : 'Add/Update'} Patient, Doctor, and Lab Info
+                {showPatientDoctorLab ? 'Hide' : 'Add/Update Doctor Info'}
               </Button>
               <Collapse in={showPatientDoctorLab} animateOpacity>
                 <Box p={4} bg="gray.50" borderRadius="md" boxShadow="sm">
-                  {/* Patient, Doctor, Lab fields */}
                   <Grid templateColumns={'1fr'} gap={6}>
-                    <GridItem>
-                      <FloatingInput label="Patient Name" id="patientName" name="patientName" value={form.patientName} onChange={handleChange} />
-                    </GridItem>
-                    <GridItem>
-                      <FloatingInput label="Patient Address" id="patientAddress" name="patientAddress" value={form.patientAddress} onChange={handleChange} />
-                    </GridItem>
-                    <GridItem>
-                      <FloatingInput label="Patient Email" id="patientEmail" name="patientEmail" type="email" value={form.patientEmail} onChange={handleChange} />
-                    </GridItem>
-                    <GridItem>
-                      <FloatingInput label="Patient Date of Birth" id="patientDOB" name="patientDOB" type="date" value={form.patientDOB} onChange={handleChange} />
-                    </GridItem>
                     <GridItem>
                       <FloatingInput label="Doctor Name" id="doctorName" name="doctorName" value={form.doctorName} onChange={handleChange} />
                     </GridItem>
@@ -623,7 +616,7 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
         return (
           <VStack spacing={8} align="stretch">
             {/* DropZone for Insurance Card at the top */}
-            <Box mt={6}>
+            <Box mt={6} mb={4}>
               <Text fontSize="xl" fontWeight="bold" mb={2}>Insurance Card</Text>
               <DropZone
                 label="Upload Insurance Card"
@@ -634,111 +627,102 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
                 }}
                 preview={insurancePreview}
                 setPreview={setInsurancePreview}
+                icon={FaIdCard}
               />
+              <Button
+                onClick={() => setShowInsuranceInfo((v) => !v)}
+                leftIcon={<FaChevronRight style={{ transform: showInsuranceInfo ? 'rotate(90deg)' : 'none', transition: '0.2s' }} />}
+                variant="outline"
+                colorScheme="blue"
+                mt={4}
+                mb={2}
+                w="100%"
+                justifyContent="flex-start"
+              >
+                {showInsuranceInfo ? 'Hide' : 'Add/Update Insurance Info'}
+              </Button>
+              <Collapse in={showInsuranceInfo} animateOpacity>
+                <Box p={4} bg="gray.50" borderRadius="md" boxShadow="sm">
+                  <Grid templateColumns={'1fr'} gap={6}>
+                    <GridItem>
+                      <FloatingInput label="Insurance Provider" id="insuranceProvider" name="insuranceProvider" value={form.insuranceProvider} onChange={handleChange} />
+                    </GridItem>
+                    <GridItem>
+                      <FloatingInput label="Policy Number" id="policyNumber" name="policyNumber" value={form.policyNumber} onChange={handleChange} />
+                    </GridItem>
+                    <GridItem>
+                      <FloatingInput label="Group Number" id="groupNumber" name="groupNumber" value={form.groupNumber} onChange={handleChange} />
+                    </GridItem>
+                    <GridItem>
+                      <FloatingInput label="Member ID" id="memberId" name="memberId" value={form.memberId} onChange={handleChange} />
+                    </GridItem>
+                    <GridItem>
+                      <FloatingInput label="Insurance Phone" id="insurancePhone" name="insurancePhone" type="tel" value={form.insurancePhone} onChange={handleChange} />
+                    </GridItem>
+                    <GridItem>
+                      <FloatingInput label="Insurance Email" id="insuranceEmail" name="insuranceEmail" type="email" value={form.insuranceEmail} onChange={handleChange} />
+                    </GridItem>
+                    <GridItem>
+                      <FloatingInput label="Insurance Address" id="insuranceAddress" name="insuranceAddress" value={form.insuranceAddress} onChange={handleChange} />
+                    </GridItem>
+                    <GridItem>
+                      <FloatingInput label="Insurance Fax" id="insuranceFax" name="insuranceFax" type="tel" value={form.insuranceFax} onChange={handleChange} />
+                    </GridItem>
+                    <GridItem>
+                      <FloatingInput label="Insurance Website" id="insuranceWebsite" name="insuranceWebsite" type="url" value={form.insuranceWebsite} onChange={handleChange} />
+                    </GridItem>
+                    <GridItem>
+                      <FloatingInput label="Insurance Notes" id="insuranceNotes" name="insuranceNotes" value={form.insuranceNotes} onChange={handleChange} />
+                    </GridItem>
+                  </Grid>
+                </Box>
+              </Collapse>
             </Box>
             <Box>
-              <Text mb={4} fontSize="lg" fontWeight="medium" color="blue.400">
-                Insurance Information
+              <Text mb={4} fontSize="xl" fontWeight="bold" color="blue.400">
+                Patient ID
               </Text>
-              <Text mb={4} color="gray.300">
-                Please provide your insurance information below. All fields are optional.
-              </Text>
-              <Grid templateColumns={'1fr'} gap={6}>
-                <GridItem>
-                  <FloatingInput
-                    label="Insurance Provider"
-                    id="insuranceProvider"
-                    name="insuranceProvider"
-                    value={form.insuranceProvider}
-                    onChange={handleChange}
-                  />
-                </GridItem>
-                <GridItem>
-                  <FloatingInput
-                    label="Policy Number"
-                    id="policyNumber"
-                    name="policyNumber"
-                    value={form.policyNumber}
-                    onChange={handleChange}
-                  />
-                </GridItem>
-                <GridItem>
-                  <FloatingInput
-                    label="Group Number"
-                    id="groupNumber"
-                    name="groupNumber"
-                    value={form.groupNumber}
-                    onChange={handleChange}
-                  />
-                </GridItem>
-                <GridItem>
-                  <FloatingInput
-                    label="Member ID"
-                    id="memberId"
-                    name="memberId"
-                    value={form.memberId}
-                    onChange={handleChange}
-                  />
-                </GridItem>
-                <GridItem>
-                  <FloatingInput
-                    label="Insurance Phone"
-                    id="insurancePhone"
-                    name="insurancePhone"
-                    type="tel"
-                    value={form.insurancePhone}
-                    onChange={handleChange}
-                  />
-                </GridItem>
-                <GridItem>
-                  <FloatingInput
-                    label="Insurance Email"
-                    id="insuranceEmail"
-                    name="insuranceEmail"
-                    type="email"
-                    value={form.insuranceEmail}
-                    onChange={handleChange}
-                  />
-                </GridItem>
-                <GridItem>
-                  <FloatingInput
-                    label="Insurance Address"
-                    id="insuranceAddress"
-                    name="insuranceAddress"
-                    value={form.insuranceAddress}
-                    onChange={handleChange}
-                  />
-                </GridItem>
-                <GridItem>
-                  <FloatingInput
-                    label="Insurance Fax"
-                    id="insuranceFax"
-                    name="insuranceFax"
-                    type="tel"
-                    value={form.insuranceFax}
-                    onChange={handleChange}
-                  />
-                </GridItem>
-                <GridItem>
-                  <FloatingInput
-                    label="Insurance Website"
-                    id="insuranceWebsite"
-                    name="insuranceWebsite"
-                    type="url"
-                    value={form.insuranceWebsite}
-                    onChange={handleChange}
-                  />
-                </GridItem>
-                <GridItem>
-                  <FloatingInput
-                    label="Insurance Notes"
-                    id="insuranceNotes"
-                    name="insuranceNotes"
-                    value={form.insuranceNotes}
-                    onChange={handleChange}
-                  />
-                </GridItem>
-              </Grid>
+              <DropZone
+                label="Upload Patient ID"
+                file={form.patientIdImage}
+                setFile={(file) => {
+                  setForm((f) => ({ ...f, patientIdImage: file }));
+                  handleImageUpload(file, 'patient-id');
+                }}
+                preview={patientIdPreview}
+                setPreview={setPatientIdPreview}
+                mb={4}
+                icon={FaAddressCard}
+              />
+              <Button
+                onClick={() => setShowPatientInfo((v) => !v)}
+                leftIcon={<FaChevronRight style={{ transform: showPatientInfo ? 'rotate(90deg)' : 'none', transition: '0.2s' }} />}
+                variant="outline"
+                colorScheme="blue"
+                mb={2}
+                w="100%"
+                justifyContent="flex-start"
+              >
+                {showPatientInfo ? 'Hide' : 'Add/Update'} Patient Info
+              </Button>
+              <Collapse in={showPatientInfo} animateOpacity>
+                <Box p={4} bg="gray.50" borderRadius="md" boxShadow="sm">
+                  <Grid templateColumns={'1fr'} gap={6}>
+                    <GridItem>
+                      <FloatingInput label="Patient Name" id="patientName" name="patientName" value={form.patientName} onChange={handleChange} />
+                    </GridItem>
+                    <GridItem>
+                      <FloatingInput label="Patient Address" id="patientAddress" name="patientAddress" value={form.patientAddress} onChange={handleChange} />
+                    </GridItem>
+                    <GridItem>
+                      <FloatingInput label="Patient Email" id="patientEmail" name="patientEmail" type="email" value={form.patientEmail} onChange={handleChange} />
+                    </GridItem>
+                    <GridItem>
+                      <FloatingInput label="Patient Date of Birth" id="patientDOB" name="patientDOB" type="date" value={form.patientDOB} onChange={handleChange} />
+                    </GridItem>
+                  </Grid>
+                </Box>
+              </Collapse>
             </Box>
           </VStack>
         );
@@ -1049,6 +1033,7 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
               preview={scriptPreview}
               setPreview={setScriptPreview}
               mb={4}
+              icon={FaStethoscope}
             />
             {/* Move Patient/Doctor/Lab Info here */}
             <Button
@@ -1060,24 +1045,11 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
               w="100%"
               justifyContent="flex-start"
             >
-              {showPatientDoctorLab ? 'Hide' : 'Add/Update'} Patient, Doctor, and Lab Info
+              {showPatientDoctorLab ? 'Hide' : 'Add/Update Doctor Info'}
             </Button>
             <Collapse in={showPatientDoctorLab} animateOpacity>
               <Box p={4} bg="gray.50" borderRadius="md" boxShadow="sm">
-                {/* Patient, Doctor, Lab fields */}
                 <Grid templateColumns={'1fr'} gap={6}>
-                  <GridItem>
-                    <FloatingInput label="Patient Name" id="patientName" name="patientName" value={form.patientName} onChange={handleChange} />
-                  </GridItem>
-                  <GridItem>
-                    <FloatingInput label="Patient Address" id="patientAddress" name="patientAddress" value={form.patientAddress} onChange={handleChange} />
-                  </GridItem>
-                  <GridItem>
-                    <FloatingInput label="Patient Email" id="patientEmail" name="patientEmail" type="email" value={form.patientEmail} onChange={handleChange} />
-                  </GridItem>
-                  <GridItem>
-                    <FloatingInput label="Patient Date of Birth" id="patientDOB" name="patientDOB" type="date" value={form.patientDOB} onChange={handleChange} />
-                  </GridItem>
                   <GridItem>
                     <FloatingInput label="Doctor Name" id="doctorName" name="doctorName" value={form.doctorName} onChange={handleChange} />
                   </GridItem>
@@ -1116,7 +1088,7 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
               </Box>
             </Collapse>
           </Box>
-          <Box mt={6}>
+          <Box mt={6} mb={4}>
             <Text fontSize="xl" fontWeight="bold" mb={2}>Insurance Card</Text>
             <DropZone
               label="Upload Insurance Card"
@@ -1127,19 +1099,19 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
               }}
               preview={insurancePreview}
               setPreview={setInsurancePreview}
+              icon={FaIdCard}
             />
-          </Box>
-          <Box>
             <Button
               onClick={() => setShowInsuranceInfo((v) => !v)}
               leftIcon={<FaChevronRight style={{ transform: showInsuranceInfo ? 'rotate(90deg)' : 'none', transition: '0.2s' }} />}
               variant="outline"
               colorScheme="blue"
+              mt={4}
               mb={2}
               w="100%"
               justifyContent="flex-start"
             >
-              {showInsuranceInfo ? 'Hide' : 'Add/Update'} Insurance Info
+              {showInsuranceInfo ? 'Hide' : 'Add/Update Insurance Info'}
             </Button>
             <Collapse in={showInsuranceInfo} animateOpacity>
               <Box p={4} bg="gray.50" borderRadius="md" boxShadow="sm">
@@ -1173,6 +1145,52 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
                   </GridItem>
                   <GridItem>
                     <FloatingInput label="Insurance Notes" id="insuranceNotes" name="insuranceNotes" value={form.insuranceNotes} onChange={handleChange} />
+                  </GridItem>
+                </Grid>
+              </Box>
+            </Collapse>
+          </Box>
+          <Box mt={6}>
+            <Text mb={4} fontSize="xl" fontWeight="bold" color="blue.400">
+              Patient ID
+            </Text>
+            <DropZone
+              label="Upload Patient ID"
+              file={form.patientIdImage}
+              setFile={(file) => {
+                setForm((f) => ({ ...f, patientIdImage: file }));
+                handleImageUpload(file, 'patient-id');
+              }}
+              preview={patientIdPreview}
+              setPreview={setPatientIdPreview}
+              mb={4}
+              icon={FaAddressCard}
+            />
+            <Button
+              onClick={() => setShowPatientInfo((v) => !v)}
+              leftIcon={<FaChevronRight style={{ transform: showPatientInfo ? 'rotate(90deg)' : 'none', transition: '0.2s' }} />}
+              variant="outline"
+              colorScheme="blue"
+              mb={2}
+              w="100%"
+              justifyContent="flex-start"
+            >
+              {showPatientInfo ? 'Hide' : 'Add/Update'} Patient Info
+            </Button>
+            <Collapse in={showPatientInfo} animateOpacity>
+              <Box p={4} bg="gray.50" borderRadius="md" boxShadow="sm">
+                <Grid templateColumns={'1fr'} gap={6}>
+                  <GridItem>
+                    <FloatingInput label="Patient Name" id="patientName" name="patientName" value={form.patientName} onChange={handleChange} />
+                  </GridItem>
+                  <GridItem>
+                    <FloatingInput label="Patient Address" id="patientAddress" name="patientAddress" value={form.patientAddress} onChange={handleChange} />
+                  </GridItem>
+                  <GridItem>
+                    <FloatingInput label="Patient Email" id="patientEmail" name="patientEmail" type="email" value={form.patientEmail} onChange={handleChange} />
+                  </GridItem>
+                  <GridItem>
+                    <FloatingInput label="Patient Date of Birth" id="patientDOB" name="patientDOB" type="date" value={form.patientDOB} onChange={handleChange} />
                   </GridItem>
                 </Grid>
               </Box>

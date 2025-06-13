@@ -61,7 +61,7 @@ export default function AdminPanel() {
                   <Spinner size="xl" />
                 </Box>
               ) : (
-                <Box overflowX="auto">
+                <Box overflowX="auto" maxW="100vw">
                   <Table variant="striped" colorScheme="gray">
                     <Thead>
                       <Tr>

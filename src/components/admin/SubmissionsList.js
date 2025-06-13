@@ -209,162 +209,150 @@ function SubmissionsList() {
         </Box>
       </Box>
       {/* Desktop Table */}
-      <Box display={{ base: 'none', md: 'block' }}>
-        <Table variant="unstyled" size="sm" width="100%" style={{ tableLayout: 'auto', borderCollapse: 'collapse' }}>
-          <Thead>
-            <Tr bg="blue.700">
-              <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Date</Th>
-              <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Draw ID</Th>
-              <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Patient</Th>
-              <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Phlebotomist</Th>
-              <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Status</Th>
-              <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">FedEx</Th>
-              <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Lab Results</Th>
-              <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Doctor's Script</Th>
-              <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Insurance Card</Th>
-              <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Deleted</Th>
-              <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Actions</Th>
-            </Tr>
-          </Thead>
-          <Tbody>
-            {validSubmissions.map((submission, idx) => (
-              <Tr key={submission.id}
-                bg={idx % 2 === 0 ? 'white' : 'gray.100'}
-                _hover={{ bg: 'blue.50' }}
-              >
-                <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">{new Date(submission.submitted_at).toLocaleDateString()}</Td>
-                <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">{submission.id}</Td>
-                <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">{submission.patient_name || 'N/A'}</Td>
-                <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">{submission.phlebotomist_name || 'N/A'}</Td>
-                <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center" bg={
-                  submission.status === 'completed'
-                    ? 'green.300'
-                    : submission.status === 'cancelled'
-                    ? 'red.400'
-                    : 'yellow.300'
-                } color={
-                  submission.status === 'cancelled' ? 'white' : 'black'
-                }>
-                  <Box w="100%" h="100%" display="flex" alignItems="center" justifyContent="center" fontWeight="bold" fontSize="xl">
-                    {submission.status}
-                  </Box>
-                </Td>
-                <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">
-                  {submission.need_fedex_label ? (
-                    submission.fedex_label_url ? (
-                      <Button
-                        as="a"
-                        href={submission.fedex_label_url}
-                        target="_blank"
-                        leftIcon={<AttachmentIcon />}
-                        size="md"
-                        colorScheme="blue"
-                        variant="outline"
-                        px={2}
-                        py={0.5}
-                        fontWeight="bold"
-                      >
-                        View
-                      </Button>
-                    ) : (
-                      <>
-                        <Input
-                          type="file"
-                          accept="application/pdf,image/*"
-                          size="md"
-                          py={0.5}
-                          fontWeight="bold"
-                          onChange={e => handleFedexLabelUpload(submission.id, e.target.files[0])}
-                        />
-                        <Box mt={2} p={3} bg="yellow.100" color="orange.800" fontWeight="bold" borderRadius="md" fontSize="lg" textAlign="center">
-                          Waiting for FedEx label upload!
-                        </Box>
-                      </>
-                    )
-                  ) : null}
-                </Td>
-                <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">
-                  {submission.lab_results_url ? (
+      <Table variant="unstyled" size="sm" width="100%" style={{ tableLayout: 'auto', borderCollapse: 'collapse' }}>
+        <Thead>
+          <Tr bg="blue.700">
+            <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Date</Th>
+            <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Draw ID</Th>
+            <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Patient</Th>
+            <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Patient ID</Th>
+            <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Phlebotomist</Th>
+            <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Status</Th>
+            <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">FedEx</Th>
+            <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Lab Results</Th>
+            <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Insurance Card</Th>
+            <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Patient ID File</Th>
+            <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Deleted</Th>
+            <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Actions</Th>
+          </Tr>
+        </Thead>
+        <Tbody>
+          {validSubmissions.map((submission, idx) => (
+            <Tr key={submission.id}
+              bg={idx % 2 === 0 ? 'white' : 'gray.100'}
+              _hover={{ bg: 'blue.50' }}
+            >
+              <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">{new Date(submission.submitted_at).toLocaleDateString()}</Td>
+              <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">{submission.id}</Td>
+              <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">{submission.patient_name || 'N/A'}</Td>
+              <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">{submission.patient_id_url ? (<Button as="a" href={submission.patient_id_url} target="_blank" leftIcon={<AttachmentIcon />} size="md" colorScheme="blue" variant="outline" px={2} py={0.5} fontWeight="bold">View</Button>) : (<Text color="gray.400">No file</Text>)}</Td>
+              <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">{submission.phlebotomist_name || 'N/A'}</Td>
+              <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center" bg={
+                submission.status === 'completed'
+                  ? 'green.300'
+                  : submission.status === 'cancelled'
+                  ? 'red.400'
+                  : 'yellow.300'
+              } color={
+                submission.status === 'cancelled' ? 'white' : 'black'
+              }>
+                <Box w="100%" h="100%" display="flex" alignItems="center" justifyContent="center" fontWeight="bold" fontSize="xl">
+                  {submission.status}
+                </Box>
+              </Td>
+              <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">
+                {submission.need_fedex_label ? (
+                  submission.fedex_label_url ? (
                     <Button
                       as="a"
-                      href={submission.lab_results_url}
+                      href={submission.fedex_label_url}
                       target="_blank"
                       leftIcon={<AttachmentIcon />}
                       size="md"
-                      colorScheme="green"
+                      colorScheme="blue"
                       variant="outline"
                       px={2}
                       py={0.5}
                       fontWeight="bold"
                     >
-                      Download
+                      View
                     </Button>
                   ) : (
-                    <Input
-                      type="file"
-                      accept="application/pdf,image/*"
-                      size="md"
-                      py={0.5}
-                      fontWeight="bold"
-                      onChange={e => handleLabResultsUpload(submission.id, e.target.files[0])}
-                    />
-                  )}
-                </Td>
-                <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">
-                  {submission.script_url ? (
-                    <Button as="a" href={submission.script_url} target="_blank" leftIcon={<AttachmentIcon />} size="md" colorScheme="blue" variant="outline" px={2} py={0.5} fontWeight="bold">View</Button>
-                  ) : (
-                    <Text color="gray.400">No file</Text>
-                  )}
-                </Td>
-                <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">
-                  {submission.insurance_card_url ? (
-                    <Button as="a" href={submission.insurance_card_url} target="_blank" leftIcon={<AttachmentIcon />} size="md" colorScheme="blue" variant="outline" px={2} py={0.5} fontWeight="bold">View</Button>
-                  ) : (
-                    <Text color="gray.400">No file</Text>
-                  )}
-                </Td>
-                <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center" bg={submission.deleted_by_lab ? 'red.400' : idx % 2 === 0 ? 'white' : 'gray.100'} color={submission.deleted_by_lab ? 'white' : 'black'}>
-                  <Box w="100%" h="100%" display="flex" alignItems="center" justifyContent="center" fontWeight="bold" fontSize="xl">
-                    {submission.deleted_by_lab ? 'DELETED BY LAB' : ''}
-                  </Box>
-                </Td>
-                <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center" bg={idx % 2 === 0 ? 'white' : 'gray.100'}>
-                  <Box display="flex" alignItems="center" justifyContent="center" gap={2} w="100%">
-                    <Select
-                      value={submission.status}
-                      onChange={(e) => handleStatusChange(submission.id, e.target.value)}
-                      size="md"
-                      maxW="120px"
-                      py={0.5}
-                      fontWeight="bold"
-                      flex={1}
-                      minW="100px"
-                    >
-                      <option value="pending">Pending</option>
-                      <option value="completed">Completed</option>
-                      <option value="cancelled">Cancelled</option>
-                    </Select>
-                    <Button
-                      as={RouterLink}
-                      to={`/admin/submissions/${submission.id}`}
-                      colorScheme="blue"
-                      size="md"
-                      px={2}
-                      py={0.5}
-                      fontWeight="bold"
-                      flex={1}
-                      minW="100px"
-                    >
-                      Edit/View
-                    </Button>
-                  </Box>
-                </Td>
-              </Tr>
-            ))}
-          </Tbody>
-        </Table>
-      </Box>
+                    <>
+                      <Input
+                        type="file"
+                        accept="application/pdf,image/*"
+                        size="md"
+                        py={0.5}
+                        fontWeight="bold"
+                        onChange={e => handleFedexLabelUpload(submission.id, e.target.files[0])}
+                      />
+                      <Box mt={2} p={3} bg="yellow.100" color="orange.800" fontWeight="bold" borderRadius="md" fontSize="lg" textAlign="center">
+                        Waiting for FedEx label upload!
+                      </Box>
+                    </>
+                  )
+                ) : null}
+              </Td>
+              <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">
+                {submission.lab_results_url ? (
+                  <Button
+                    as="a"
+                    href={submission.lab_results_url}
+                    target="_blank"
+                    leftIcon={<AttachmentIcon />}
+                    size="md"
+                    colorScheme="green"
+                    variant="outline"
+                    px={2}
+                    py={0.5}
+                    fontWeight="bold"
+                  >
+                    Download
+                  </Button>
+                ) : (
+                  <Input
+                    type="file"
+                    accept="application/pdf,image/*"
+                    size="md"
+                    py={0.5}
+                    fontWeight="bold"
+                    onChange={e => handleLabResultsUpload(submission.id, e.target.files[0])}
+                  />
+                )}
+              </Td>
+              <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">{submission.insurance_card_url ? (<Button as="a" href={submission.insurance_card_url} target="_blank" leftIcon={<AttachmentIcon />} size="md" colorScheme="blue" variant="outline" px={2} py={0.5} fontWeight="bold">View</Button>) : (<Text color="gray.400">No file</Text>)}</Td>
+              <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">{submission.patient_id_url ? (<Button as="a" href={submission.patient_id_url} target="_blank" leftIcon={<AttachmentIcon />} size="md" colorScheme="blue" variant="outline" px={2} py={0.5} fontWeight="bold">Download</Button>) : (<Text color="gray.400">No file</Text>)}</Td>
+              <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center" bg={submission.deleted_by_lab ? 'red.400' : idx % 2 === 0 ? 'white' : 'gray.100'} color={submission.deleted_by_lab ? 'white' : 'black'}>
+                <Box w="100%" h="100%" display="flex" alignItems="center" justifyContent="center" fontWeight="bold" fontSize="xl">
+                  {submission.deleted_by_lab ? 'DELETED BY LAB' : ''}
+                </Box>
+              </Td>
+              <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center" bg={idx % 2 === 0 ? 'white' : 'gray.100'}>
+                <Box display="flex" alignItems="center" justifyContent="center" gap={2} w="100%">
+                  <Select
+                    value={submission.status}
+                    onChange={(e) => handleStatusChange(submission.id, e.target.value)}
+                    size="md"
+                    maxW="120px"
+                    py={0.5}
+                    fontWeight="bold"
+                    flex={1}
+                    minW="100px"
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="completed">Completed</option>
+                    <option value="cancelled">Cancelled</option>
+                  </Select>
+                  <Button
+                    as={RouterLink}
+                    to={`/admin/submissions/${submission.id}`}
+                    colorScheme="blue"
+                    size="md"
+                    px={2}
+                    py={0.5}
+                    fontWeight="bold"
+                    flex={1}
+                    minW="100px"
+                  >
+                    Edit/View
+                  </Button>
+                </Box>
+              </Td>
+            </Tr>
+          ))}
+        </Tbody>
+      </Table>
       {/* Mobile Cards */}
       <Box display={{ base: 'block', md: 'none' }}>
         <VStack spacing={4} align="stretch">
@@ -372,6 +360,7 @@ function SubmissionsList() {
             <Box key={submission.id} p={4} borderWidth={1} borderRadius="lg" boxShadow="sm" bg={idx % 2 === 0 ? 'white' : 'gray.100'}>
               <Box fontWeight="bold" fontSize="lg">Draw #{submission.id} - {new Date(submission.submitted_at).toLocaleDateString()}</Box>
               <Box>Patient: <b>{submission.patient_name || 'N/A'}</b></Box>
+              <Box>Patient ID: <b>{submission.patient_id_url ? 'View' : 'No file'}</b></Box>
               <Box>Phlebotomist: <b>{submission.phlebotomist_name || 'N/A'}</b></Box>
               <Box>Status: <b>{submission.status}</b></Box>
               <Box mt={2} mb={2}>

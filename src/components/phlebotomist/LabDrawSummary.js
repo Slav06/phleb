@@ -30,6 +30,15 @@ export default function LabDrawSummary() {
       <Heading size="lg" mb={4}>Blood Draw Summary</Heading>
       <Divider mb={4} />
       <VStack align="start" spacing={4}>
+        {/* Patient ID Image Preview */}
+        {submission.patient_id_url && (
+          <Box>
+            <Text fontWeight="bold">Patient ID</Text>
+            <Box mt={2} mb={2}>
+              <img src={submission.patient_id_url} alt="Patient ID" style={{ maxWidth: '100%', maxHeight: 250, borderRadius: 8, border: '1px solid #e0e0e0' }} />
+            </Box>
+          </Box>
+        )}
         {/* Doctor's Script Image Preview */}
         {submission.script_url && (
           <Box>
