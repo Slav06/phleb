@@ -4,7 +4,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'r
 import { supabase } from './supabaseClient';
 
 // Landing Page
-import LandingPage from './components/LandingPage';
+import NewLandingPage from './components/NewLandingPage';
 
 // Patient Routes
 import PatientLayout from './layouts/PatientLayout';
@@ -50,7 +50,7 @@ function App() {
       <Router>
         <Routes>
           {/* Landing Page - Only accessible if not a mobile lab user */}
-          <Route path="/" element={<LandingPage />} />
+          <Route path="/" element={<NewLandingPage />} />
 
           {/* Patient Routes */}
           <Route path="/patient/*" element={<PatientLayout />}>
