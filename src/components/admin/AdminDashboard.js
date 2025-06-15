@@ -17,6 +17,13 @@ import {
   useToast,
 } from '@chakra-ui/react';
 import { supabase } from '../../supabaseClient';
+import { useOutletContext } from 'react-router-dom';
+import { keyframes } from '@emotion/react';
+
+const bounce = keyframes`
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+`;
 
 function AdminDashboard() {
   const [stats, setStats] = useState({
@@ -27,9 +34,15 @@ function AdminDashboard() {
   });
 
   const toast = useToast();
+  const { adminUser } = useOutletContext();
+  const [showWelcome, setShowWelcome] = useState(false);
 
   useEffect(() => {
     fetchStats();
+    const timer = setTimeout(() => setShowWelcome(true), 5000);
+    return () => {
+      clearTimeout(timer);
+    };
   }, []);
 
   const fetchStats = async () => {
@@ -75,7 +88,9 @@ function AdminDashboard() {
 
   return (
     <Box>
-      <Heading mb={6}>Admin Dashboard</Heading>
+      <Heading mb={6}>
+        Welcome{adminUser && adminUser.name ? `, ${adminUser.name}` : ''}
+      </Heading>
       
       <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={6} mb={8}>
         <Stat

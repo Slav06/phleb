@@ -1,3 +1,27 @@
+-- Enable UUID extension
+create extension if not exists "uuid-ossp";
+
+-- Create admin_users table
+create table if not exists public.admin_users (
+  id uuid default uuid_generate_v4() primary key,
+  name text,
+  secret_code text unique not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Create profiles table
+create table if not exists public.profiles (
+  id uuid primary key,
+  full_name text,
+  email text,
+  phone text,
+  avatar_url text,
+  role text check (role in ('patient', 'phlebotomist', 'admin')) not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
 -- Users table (extends Supabase auth.users)
 create table public.profiles (
   id uuid references auth.users on delete cascade not null primary key,

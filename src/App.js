@@ -23,9 +23,11 @@ import AgreementSign from './components/phlebotomist/AgreementSign';
 // Admin Routes
 import AdminLayout from './layouts/AdminLayout';
 import AdminDashboard from './components/admin/AdminDashboard';
+import UserManagement from './components/admin/UserManagement';
 import PhlebotomistManagement from './components/admin/PhlebotomistManagement';
 import SubmissionsList from './components/admin/SubmissionsList';
 import SubmissionDetail from './components/admin/SubmissionDetail';
+import AdminLogin from './components/admin/AdminLogin';
 
 // Shared Components
 import Navigation from './components/shared/Navigation';
@@ -38,6 +40,24 @@ function MobileLabRouteGuard({ children }) {
   // If trying to access landing page or any other route without lab ID, redirect to their portal
   if (!labId || location.pathname === '/') {
     return <Navigate to={`/lab/${labId}`} replace />;
+  }
+
+  return children;
+}
+
+// Add this component before the App component
+function AdminRouteGuard({ children }) {
+  const location = useLocation();
+  const adminUser = JSON.parse(localStorage.getItem('adminUser'));
+
+  // If not logged in and not on login page, redirect to login
+  if (!adminUser && location.pathname !== '/admin/login') {
+    return <Navigate to="/admin/login" replace />;
+  }
+
+  // If logged in and on login page, redirect to admin dashboard
+  if (adminUser && location.pathname === '/admin/login') {
+    return <Navigate to="/admin" replace />;
   }
 
   return children;
@@ -75,8 +95,17 @@ function App() {
           </Route>
 
           {/* Admin Routes */}
-          <Route path="/admin/*" element={<AdminLayout />}>
+          <Route
+            path="/admin/*"
+            element={
+              <AdminRouteGuard>
+                <AdminLayout />
+              </AdminRouteGuard>
+            }
+          >
+            <Route path="login" element={<AdminLogin />} />
             <Route index element={<AdminDashboard />} />
+            <Route path="users" element={<UserManagement />} />
             <Route path="phlebotomists" element={<PhlebotomistManagement />} />
             <Route path="submissions" element={<SubmissionsList />} />
             <Route path="submissions/:id" element={<SubmissionDetail />} />
