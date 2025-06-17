@@ -6,6 +6,7 @@ create table if not exists public.admin_users (
   id uuid default uuid_generate_v4() primary key,
   name text,
   secret_code text unique not null,
+  role text check (role in ('master', 'regular')) not null default 'regular',
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
@@ -33,14 +34,18 @@ create table public.profiles (
 );
 
 -- Phlebotomist profiles
-create table public.phlebotomist_profiles (
-  id uuid references public.profiles on delete cascade not null primary key,
-  bio text,
-  rating decimal(3,2),
-  hourly_rate decimal(10,2),
-  location_lat decimal(10,8),
-  location_lng decimal(11,8),
-  service_radius_miles integer default 15,
+create table if not exists public.phlebotomist_profiles (
+  id uuid references auth.users on delete cascade not null primary key,
+  full_name text,
+  company_name text,
+  email text,
+  phone text,
+  min_draw_fee numeric,
+  max_draw_fee numeric,
+  lab_draw_fee numeric,
+  service_areas jsonb,
+  agreement_signed boolean default false,
+  agreement_signed_at timestamp with time zone,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );

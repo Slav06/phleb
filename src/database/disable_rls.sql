@@ -6,6 +6,7 @@ alter table public.appointments disable row level security;
 alter table public.chat_threads disable row level security;
 alter table public.chat_messages disable row level security;
 alter table public.reviews disable row level security;
+alter table public.admin_users disable row level security;
 
 -- Create public access policies
 create policy "Public access to profiles"
@@ -34,4 +35,8 @@ create policy "Public access to chat messages"
 
 create policy "Public access to reviews"
   on public.reviews for all
+  using (true);
+
+create policy "Public access to admin users"
+  on public.admin_users for all
   using (true); 

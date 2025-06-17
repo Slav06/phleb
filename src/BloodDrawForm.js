@@ -352,6 +352,17 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
           setSubmissionId(newSubmissionId);
         }
       }
+      // Log to admin_activity_log
+      if (labInfo && (labInfo.company_name || labInfo.full_name || labInfo.email)) {
+        await supabase.from('admin_activity_log').insert([
+          {
+            action: 'Created Blood Draw Submission',
+            username: labInfo.company_name || labInfo.full_name || labInfo.email,
+            details: `Patient: ${form.patientName || form.patient_name || ''}, Submission ID: ${newSubmissionId}`,
+            created_at: new Date().toISOString(),
+          },
+        ]);
+      }
       // Now, if user requested a FedEx label, do it with the new ID
       if (needFedexLabelChoice === true && selectedAddress && newSubmissionId) {
         await handleFedExLabelRequest(newSubmissionId);

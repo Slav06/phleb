@@ -6,8 +6,11 @@ import {
   HStack,
   Button,
   useToast,
+  IconButton,
+  Spacer,
 } from '@chakra-ui/react';
 import { Link as RouterLink, useNavigate, Outlet } from 'react-router-dom';
+import { FaHome, FaUsers, FaVials, FaFileMedical } from 'react-icons/fa';
 
 function AdminLayout() {
   const navigate = useNavigate();
@@ -31,24 +34,58 @@ function AdminLayout() {
       {adminUser && (
         <Flex as="nav" align="center" justify="space-between" wrap="wrap" p={4} bg="gray.800" color="white">
           <HStack spacing={8} align="center">
-            <Link as={RouterLink} to="/admin" color="white" _hover={{ textDecoration: 'none', color: 'blue.200' }}>
-              Dashboard
-            </Link>
-            {adminUser.role === 'master' && (
-              <Link as={RouterLink} to="/admin/users" color="white" _hover={{ textDecoration: 'none', color: 'blue.200' }}>
-                User Management
-              </Link>
-            )}
-            <Link as={RouterLink} to="/admin/phlebotomists" color="white" _hover={{ textDecoration: 'none', color: 'blue.200' }}>
-              Phlebotomists
-            </Link>
-            <Link as={RouterLink} to="/admin/submissions" color="white" _hover={{ textDecoration: 'none', color: 'blue.200' }}>
-              Submissions
-            </Link>
+            <IconButton
+              as={RouterLink}
+              to="/admin"
+              icon={<FaHome />}
+              aria-label="Dashboard"
+              variant="ghost"
+              color="white"
+              fontSize="2xl"
+              _hover={{ color: 'blue.200', bg: 'gray.700' }}
+            />
+            <IconButton
+              as={RouterLink}
+              to="/admin/phlebotomists"
+              icon={<FaVials />}
+              aria-label="Mobile Labs"
+              variant="ghost"
+              color="white"
+              fontSize="2xl"
+              _hover={{ color: 'blue.200', bg: 'gray.700' }}
+              title="Mobile Labs"
+            />
+            <IconButton
+              as={RouterLink}
+              to="/admin/submissions"
+              icon={<FaFileMedical />}
+              aria-label="Blood Files"
+              variant="ghost"
+              color="white"
+              fontSize="2xl"
+              _hover={{ color: 'blue.200', bg: 'gray.700' }}
+              title="Blood Files"
+            />
           </HStack>
-          <Button colorScheme="red" variant="outline" onClick={handleLogout}>
-            Logout
-          </Button>
+          <Flex align="center">
+            {adminUser.role === 'master' && (
+              <IconButton
+                as={RouterLink}
+                to="/admin/users"
+                icon={<FaUsers />}
+                aria-label="User Management"
+                variant="ghost"
+                color="white"
+                fontSize="2xl"
+                _hover={{ color: 'blue.200', bg: 'gray.700' }}
+                title="User Management"
+                mr={4}
+              />
+            )}
+            <Button colorScheme="red" variant="outline" onClick={handleLogout}>
+              Logout
+            </Button>
+          </Flex>
         </Flex>
       )}
       {/* Main Content */}

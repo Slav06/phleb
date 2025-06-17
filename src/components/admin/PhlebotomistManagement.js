@@ -30,9 +30,12 @@ import {
   NumberDecrementStepper,
   HStack,
   Heading,
+  Badge,
 } from '@chakra-ui/react';
 import { EditIcon, DeleteIcon, AddIcon, CopyIcon, CheckIcon } from '@chakra-ui/icons';
 import { supabase } from '../../supabaseClient';
+import { useOutletContext } from 'react-router-dom';
+import jsPDF from 'jspdf';
 
 const PhlebotomistManagement = () => {
   const [phlebotomists, setPhlebotomists] = useState([]);
@@ -40,6 +43,7 @@ const PhlebotomistManagement = () => {
   const [selectedPhlebotomist, setSelectedPhlebotomist] = useState(null);
   const { isOpen, onOpen, onClose } = useDisclosure();
   const toast = useToast();
+  const { adminUser } = useOutletContext();
 
   const [formData, setFormData] = useState({
     full_name: '',
@@ -49,6 +53,7 @@ const PhlebotomistManagement = () => {
     company_address: '',
     min_draw_fee: '',
     max_draw_fee: '',
+    lab_draw_fee: '',
     service_areas: [{ zip_code: '', radius: 10 }],
   });
 
@@ -108,6 +113,7 @@ const PhlebotomistManagement = () => {
         .single();
 
       let userId;
+      let actionType;
       if (existingUser) {
         // 2. Update the phlebotomist profile
         userId = existingUser.id;
@@ -121,10 +127,12 @@ const PhlebotomistManagement = () => {
             company_address: formData.company_address,
             min_draw_fee: parseFloat(formData.min_draw_fee),
             max_draw_fee: parseFloat(formData.max_draw_fee),
+            lab_draw_fee: typeof formData.lab_draw_fee === 'number' ? formData.lab_draw_fee : 0,
             service_areas: formData.service_areas,
           })
           .eq('id', userId);
         if (updateError) throw updateError;
+        actionType = 'Updated Mobile Lab';
       } else {
         // 3. Create the user profile
         const { data: userData, error: userError } = await supabase.auth.signUp({
@@ -158,10 +166,24 @@ const PhlebotomistManagement = () => {
               company_address: formData.company_address,
               min_draw_fee: parseFloat(formData.min_draw_fee),
               max_draw_fee: parseFloat(formData.max_draw_fee),
+              lab_draw_fee: typeof formData.lab_draw_fee === 'number' ? formData.lab_draw_fee : 0,
               service_areas: formData.service_areas,
             },
           ]);
         if (phlebProfileError) throw phlebProfileError;
+        actionType = 'Added Mobile Lab';
+      }
+
+      // Log to admin_activity_log
+      if (adminUser && adminUser.name) {
+        await supabase.from('admin_activity_log').insert([
+          {
+            action: actionType,
+            username: adminUser.name,
+            details: formData.company_name || formData.full_name || formData.email,
+            created_at: new Date().toISOString(),
+          },
+        ]);
       }
 
       toast({
@@ -197,6 +219,7 @@ const PhlebotomistManagement = () => {
       company_address: '',
       min_draw_fee: '',
       max_draw_fee: '',
+      lab_draw_fee: '',
       service_areas: [{ zip_code: '', radius: 10 }],
     });
   };
@@ -231,6 +254,7 @@ const PhlebotomistManagement = () => {
       company_address: phlebotomist.company_address,
       min_draw_fee: phlebotomist.min_draw_fee,
       max_draw_fee: phlebotomist.max_draw_fee,
+      lab_draw_fee: phlebotomist.lab_draw_fee,
       service_areas: phlebotomist.service_areas,
     });
     onOpen();
@@ -266,6 +290,68 @@ const PhlebotomistManagement = () => {
     }
   };
 
+  const downloadAgreement = async (phlebotomist) => {
+    try {
+      // Create a new PDF document
+      const doc = new jsPDF();
+      
+      // Add title
+      doc.setFontSize(16);
+      doc.text('MOBILE PHLEBOTOMY CONTRACTOR AGREEMENT', 20, 20);
+      
+      // Add company info
+      doc.setFontSize(12);
+      doc.text(`Company: ${phlebotomist.company_name}`, 20, 40);
+      doc.text(`Signed by: ${phlebotomist.agreement_printed_name}`, 20, 50);
+      doc.text(`Date: ${new Date(phlebotomist.agreement_signed_at).toLocaleDateString()}`, 20, 60);
+      
+      // Add agreement text
+      doc.setFontSize(10);
+      const agreementText = [
+        'This MOBILE PHLEBOTOMY CONTRACTOR AGREEMENT ("Agreement") is made effective on the date signed above between QUALITY LABORATORY, a New Jersey limited liability company ("Contractor") and the above-named company ("Company").',
+        '',
+        '1. Qualifications & Services: Contractor employs phlebotomists who are in good standing, experienced, qualified, licensed, certified, and approved to draw blood and collect other specimens without restriction or limitation in the state in which Company is performing services. The Company hereby retains Contractor\'s services to draw and collect patient specimens as needed by the Company. Contractor shall be compensated at a rate of $' + phlebotomist.min_draw_fee + ' to $' + phlebotomist.max_draw_fee + ' per blood draw, as agreed upon during the onboarding process.',
+        '',
+        '2. Instructions & Supplies: The Company shall advise Contractor of the patient\'s location, who is in need of phlebotomy services, the specimens required, and the time period in which such specimens are needed by the Company. Contractor shall, within a reasonable time period, collect the patient specimens from such patients and shall prepare and maintain all appropriate documentation related to the collection and delivery of such specimens. The Company shall provide Contractor with all necessary supplies to collect and process the specimens.',
+        '',
+        '3. Indemnification: Each party shall defend, indemnify, keep, save and hold harmless, the other, its directors, officers, employees, agents and independent contractors, from any and all suits, damages, liabilities, losses or expenses, including reasonable attorney\'s fees ("Claims"), which arise from the acts and omissions of the other party. The terms and provisions regarding indemnification shall survive the termination of this Agreement.',
+        '',
+        '4. Governing Law: This Agreement shall be governed by the laws of the State of New Jersey.',
+        '',
+        '5. Modification: This Agreement shall not be modified, amended, or supplemented except as specified herein or by written instrument executed by both parties.'
+      ];
+      
+      doc.text(agreementText, 20, 80);
+      
+      // Add signature if available
+      if (phlebotomist.agreement_signature) {
+        const img = new Image();
+        img.src = phlebotomist.agreement_signature;
+        doc.addImage(img, 'PNG', 20, 200, 50, 20);
+      }
+      
+      // Save the PDF
+      doc.save(`agreement_${phlebotomist.company_name.replace(/\s+/g, '_')}.pdf`);
+      
+      toast({
+        title: 'Success',
+        description: 'Agreement downloaded successfully',
+        status: 'success',
+        duration: 3000,
+        isClosable: true,
+      });
+    } catch (error) {
+      console.error('Error downloading agreement:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to download agreement',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    }
+  };
+
   return (
     <Box w="100vw" maxW="100vw" px={0} py={2} overflowX="auto" bg="white">
       <Heading mb={2} size="md" textAlign="left">Mobile Labs</Heading>
@@ -282,8 +368,10 @@ const PhlebotomistManagement = () => {
               <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Company</Th>
               <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Email</Th>
               <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Phone</Th>
-              <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Draw Fee Range</Th>
+              <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Patient Fee Range</Th>
+              <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Lab Fee</Th>
               <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Service Areas</Th>
+              <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Agreement</Th>
               <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Portal Link</Th>
               <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Actions</Th>
             </Tr>
@@ -299,6 +387,7 @@ const PhlebotomistManagement = () => {
                 <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">{phlebotomist.email}</Td>
                 <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">{phlebotomist.phone}</Td>
                 <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">${phlebotomist.min_draw_fee} - ${phlebotomist.max_draw_fee}</Td>
+                <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">${phlebotomist.lab_draw_fee || '0.00'}</Td>
                 <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">
                   {phlebotomist.service_areas?.map((area, index) => (
                     <Text key={index}>
@@ -307,32 +396,46 @@ const PhlebotomistManagement = () => {
                   ))}
                 </Td>
                 <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">
-                  <HStack justify="center">
-                    <Button
-                      size="sm"
-                      leftIcon={copiedId === phlebotomist.id ? <CheckIcon /> : <CopyIcon />}
-                      onClick={() => {
-                        navigator.clipboard.writeText(`${window.location.origin}/lab/${phlebotomist.id}`);
-                        setCopiedId(phlebotomist.id);
-                        setTimeout(() => setCopiedId(null), 1500);
-                        toast({
-                          title: 'Link copied!',
-                          description: 'Portal link copied to clipboard',
-                          status: 'success',
-                          duration: 2000,
-                          isClosable: true,
-                        });
-                      }}
-                    >
-                      {copiedId === phlebotomist.id ? 'Copied!' : 'Copy Link'}
-                    </Button>
-                  </HStack>
+                  {phlebotomist.agreement_signed ? (
+                    <VStack spacing={2}>
+                      <Badge colorScheme="green">Signed</Badge>
+                      <Text fontSize="sm">{new Date(phlebotomist.agreement_signed_at).toLocaleDateString()}</Text>
+                      <Button
+                        size="sm"
+                        colorScheme="blue"
+                        onClick={() => downloadAgreement(phlebotomist)}
+                      >
+                        Download
+                      </Button>
+                    </VStack>
+                  ) : (
+                    <Badge colorScheme="red">Not Signed</Badge>
+                  )}
                 </Td>
                 <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">
-                  <HStack justify="center">
+                  <Button
+                    size="sm"
+                    leftIcon={copiedId === phlebotomist.id ? <CheckIcon /> : <CopyIcon />}
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/lab/${phlebotomist.id}`);
+                      setCopiedId(phlebotomist.id);
+                      setTimeout(() => setCopiedId(null), 1500);
+                      toast({
+                        title: 'Link copied!',
+                        description: 'Portal link copied to clipboard',
+                        status: 'success',
+                        duration: 2000,
+                        isClosable: true,
+                      });
+                    }}
+                  >
+                    {copiedId === phlebotomist.id ? 'Copied!' : 'Copy Link'}
+                  </Button>
+                </Td>
+                <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">
+                  <HStack spacing={2} justify="center">
                     <IconButton
                       icon={<EditIcon />}
-                      mr={2}
                       onClick={() => handleEdit(phlebotomist)}
                       aria-label="Edit mobile lab"
                     />
@@ -360,7 +463,8 @@ const PhlebotomistManagement = () => {
                 <Text>{phlebotomist.company_name}</Text>
                 <Text>{phlebotomist.email}</Text>
                 <Text>{phlebotomist.phone}</Text>
-                <Text>Draw Fee: ${phlebotomist.min_draw_fee} - ${phlebotomist.max_draw_fee}</Text>
+                <Text>Patient Fee Range: ${phlebotomist.min_draw_fee} - ${phlebotomist.max_draw_fee}</Text>
+                <Text>Lab Fee: ${phlebotomist.lab_draw_fee || '0.00'}</Text>
                 <Box>
                   <Text fontWeight="bold">Service Areas:</Text>
                   {phlebotomist.service_areas?.map((area, index) => (
@@ -369,6 +473,8 @@ const PhlebotomistManagement = () => {
                     </Text>
                   ))}
                 </Box>
+                <Text>Agreement: {phlebotomist.agreement_signed ? 'Signed' : 'Not Signed'}</Text>
+                <Text>Signed Date: {new Date(phlebotomist.agreement_signed_at).toLocaleDateString()}</Text>
                 <HStack>
                   <Button
                     size="sm"
@@ -470,7 +576,7 @@ const PhlebotomistManagement = () => {
                 </FormControl>
 
                 <FormControl isRequired>
-                  <FormLabel>Draw Fee Range</FormLabel>
+                  <FormLabel>Draw Fee Range (Patient Fee)</FormLabel>
                   <HStack>
                     <NumberInput min={0} precision={2}>
                       <NumberInputField
@@ -498,6 +604,25 @@ const PhlebotomistManagement = () => {
                       </NumberInputStepper>
                     </NumberInput>
                   </HStack>
+                </FormControl>
+
+                <FormControl isRequired>
+                  <FormLabel>Lab Draw Fee (Lab to Mobile Lab Fee)</FormLabel>
+                  <NumberInput
+                    min={0}
+                    precision={2}
+                    value={formData.lab_draw_fee}
+                    onChange={(valueString, valueNumber) => handleNumberChange('lab_draw_fee', valueNumber)}
+                  >
+                    <NumberInputField
+                      placeholder="Lab Draw Fee"
+                      name="lab_draw_fee"
+                    />
+                    <NumberInputStepper>
+                      <NumberIncrementStepper />
+                      <NumberDecrementStepper />
+                    </NumberInputStepper>
+                  </NumberInput>
                 </FormControl>
 
                 <FormControl>

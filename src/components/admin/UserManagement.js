@@ -146,13 +146,43 @@ function UserManagement() {
     e.preventDefault();
     setIsLoading(true);
     console.log('Resetting code for user id:', resetUserId, 'to:', resetCode);
+    
+    if (!resetCode.trim()) {
+      toast({
+        title: 'Error',
+        description: 'Secret code cannot be empty',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      const { error } = await supabase
+      // First check if the user exists
+      const { data: existingUser, error: fetchError } = await supabase
         .from('admin_users')
-        .update({ secret_code: resetCode })
+        .select('id')
+        .eq('id', resetUserId)
+        .single();
+
+      if (fetchError) throw fetchError;
+      if (!existingUser) {
+        throw new Error('User not found');
+      }
+
+      // Then update the secret code
+      const { error: updateError } = await supabase
+        .from('admin_users')
+        .update({ 
+          secret_code: resetCode,
+          updated_at: new Date().toISOString()
+        })
         .eq('id', resetUserId);
-      console.log('Supabase update result:', error);
-      if (error) throw error;
+
+      if (updateError) throw updateError;
+
       toast({
         title: 'Secret code reset successfully',
         status: 'success',
@@ -162,11 +192,12 @@ function UserManagement() {
       closeResetModal();
       fetchUsers();
     } catch (error) {
+      console.error('Error resetting secret code:', error);
       toast({
         title: 'Error resetting secret code',
-        description: error.message,
+        description: error.message || 'An unexpected error occurred',
         status: 'error',
-        duration: 3000,
+        duration: 5000,
         isClosable: true,
       });
     } finally {
