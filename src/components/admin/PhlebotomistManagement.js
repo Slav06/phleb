@@ -115,24 +115,59 @@ const PhlebotomistManagement = () => {
       let userId;
       let actionType;
       if (existingUser) {
-        // 2. Update the phlebotomist profile
+        // Update the profiles table
         userId = existingUser.id;
-        const { error: updateError } = await supabase
-          .from('phlebotomist_profiles')
+        await supabase
+          .from('profiles')
           .update({
             full_name: formData.full_name,
             email: formData.email,
-            phone: formData.phone,
-            company_name: formData.company_name,
-            company_address: formData.company_address,
-            min_draw_fee: parseFloat(formData.min_draw_fee),
-            max_draw_fee: parseFloat(formData.max_draw_fee),
-            lab_draw_fee: typeof formData.lab_draw_fee === 'number' ? formData.lab_draw_fee : 0,
-            service_areas: formData.service_areas,
+            role: 'phlebotomist',
           })
           .eq('id', userId);
-        if (updateError) throw updateError;
-        actionType = 'Updated Mobile Lab';
+        // Update or insert the phlebotomist profile
+        const { data: phlebProfile } = await supabase
+          .from('phlebotomist_profiles')
+          .select('id')
+          .eq('id', userId)
+          .single();
+        if (phlebProfile) {
+          // Update existing phlebotomist profile
+          await supabase
+            .from('phlebotomist_profiles')
+            .update({
+              full_name: formData.full_name,
+              email: formData.email,
+              phone: formData.phone,
+              company_name: formData.company_name,
+              company_address: formData.company_address,
+              min_draw_fee: parseFloat(formData.min_draw_fee),
+              max_draw_fee: parseFloat(formData.max_draw_fee),
+              lab_draw_fee: typeof formData.lab_draw_fee === 'number' ? formData.lab_draw_fee : 0,
+              service_areas: formData.service_areas,
+            })
+            .eq('id', userId);
+          actionType = 'Updated Mobile Lab';
+        } else {
+          // Insert new phlebotomist profile
+          await supabase
+            .from('phlebotomist_profiles')
+            .insert([
+              {
+                id: userId,
+                full_name: formData.full_name,
+                email: formData.email,
+                phone: formData.phone,
+                company_name: formData.company_name,
+                company_address: formData.company_address,
+                min_draw_fee: parseFloat(formData.min_draw_fee),
+                max_draw_fee: parseFloat(formData.max_draw_fee),
+                lab_draw_fee: typeof formData.lab_draw_fee === 'number' ? formData.lab_draw_fee : 0,
+                service_areas: formData.service_areas,
+              },
+            ]);
+          actionType = 'Added Mobile Lab';
+        }
       } else {
         // 3. Create the user profile
         const { data: userData, error: userError } = await supabase.auth.signUp({
@@ -142,7 +177,7 @@ const PhlebotomistManagement = () => {
         if (userError) throw userError;
         userId = userData.user.id;
         // Insert into profiles table
-        const { error: profileInsertError } = await supabase
+        await supabase
           .from('profiles')
           .insert([
             {
@@ -152,9 +187,8 @@ const PhlebotomistManagement = () => {
               role: 'phlebotomist',
             },
           ]);
-        if (profileInsertError) throw profileInsertError;
         // Create the phlebotomist profile
-        const { error: phlebProfileError } = await supabase
+        await supabase
           .from('phlebotomist_profiles')
           .insert([
             {
@@ -170,7 +204,6 @@ const PhlebotomistManagement = () => {
               service_areas: formData.service_areas,
             },
           ]);
-        if (phlebProfileError) throw phlebProfileError;
         actionType = 'Added Mobile Lab';
       }
 
