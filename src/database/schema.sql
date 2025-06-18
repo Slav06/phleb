@@ -108,6 +108,20 @@ create table public.reviews (
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
+-- Doctors table
+create table if not exists public.doctors (
+  id uuid primary key default gen_random_uuid(),
+  full_name text not null,
+  email text,
+  phone text,
+  npi_number text,
+  clinic_name text,
+  address text,
+  hours jsonb,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
 -- Enable Row Level Security
 alter table public.profiles enable row level security;
 alter table public.phlebotomist_profiles enable row level security;
@@ -202,4 +216,7 @@ create policy "Patients can create reviews"
       where appointments.id = reviews.appointment_id
       and appointments.patient_id = auth.uid()
     )
-  ); 
+  );
+
+-- Add draw_code for public-facing encrypted ID
+ALTER TABLE submissions ADD COLUMN IF NOT EXISTS draw_code text UNIQUE; 

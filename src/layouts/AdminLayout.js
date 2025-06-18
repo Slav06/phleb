@@ -10,7 +10,7 @@ import {
   Spacer,
 } from '@chakra-ui/react';
 import { Link as RouterLink, useNavigate, Outlet } from 'react-router-dom';
-import { FaHome, FaUsers, FaVials, FaFileMedical } from 'react-icons/fa';
+import { FaHome, FaUsers, FaVials, FaFileMedical, FaUserMd } from 'react-icons/fa';
 
 function AdminLayout() {
   const navigate = useNavigate();
@@ -65,6 +65,17 @@ function AdminLayout() {
               fontSize="2xl"
               _hover={{ color: 'blue.200', bg: 'gray.700' }}
               title="Blood Files"
+            />
+            <IconButton
+              as={RouterLink}
+              to="/admin/doctors"
+              icon={<FaUserMd />}
+              aria-label="Doctors"
+              variant="ghost"
+              color="white"
+              fontSize="2xl"
+              _hover={{ color: 'blue.200', bg: 'gray.700' }}
+              title="Doctors"
             />
           </HStack>
           <Flex align="center">

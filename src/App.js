@@ -28,6 +28,7 @@ import PhlebotomistManagement from './components/admin/PhlebotomistManagement';
 import SubmissionsList from './components/admin/SubmissionsList';
 import SubmissionDetail from './components/admin/SubmissionDetail';
 import AdminLogin from './components/admin/AdminLogin';
+import DoctorManagement from './components/admin/DoctorManagement';
 
 // Shared Components
 import Navigation from './components/shared/Navigation';
@@ -109,6 +110,7 @@ function App() {
             <Route path="phlebotomists" element={<PhlebotomistManagement />} />
             <Route path="submissions" element={<SubmissionsList />} />
             <Route path="submissions/:id" element={<SubmissionDetail />} />
+            <Route path="doctors" element={<DoctorManagement />} />
           </Route>
 
           {/* Catch all route */}

@@ -66,7 +66,7 @@ export default function SubmissionDetail() {
 
   return (
     <Box maxW="700px" mx="auto" mt={8} p={8} bg="white" borderRadius="xl" boxShadow="xl">
-      <Heading size="lg" mb={4}>Edit Blood Draw Submission</Heading>
+      <Heading size="lg" mb={4}>Edit Blood Draw Submission ({form.draw_code || form.id})</Heading>
       <Divider mb={4} />
       <VStack align="start" spacing={4}>
         <FormControl>
@@ -143,6 +143,48 @@ export default function SubmissionDetail() {
             <Button as="a" href={form.lab_results_url} target="_blank" colorScheme="green" mb={2}>View Lab Results</Button>
           ) : null}
           <Input type="file" accept="application/pdf,image/*" onChange={e => handleFileUpload('lab-results', e.target.files[0])} />
+        </FormControl>
+        <FormControl>
+          <FormLabel>Doctor's Script</FormLabel>
+          {Array.isArray(form.script_image)
+            ? form.script_image.map((url, idx) => (
+                <Button as="a" href={url} target="_blank" colorScheme="blue" mb={2} mr={2} key={idx}>
+                  View Script {form.script_image.length > 1 ? idx + 1 : ''}
+                </Button>
+              ))
+            : form.script_image ? (
+                <Button as="a" href={form.script_image} target="_blank" colorScheme="blue" mb={2}>
+                  View Script
+                </Button>
+              ) : null}
+        </FormControl>
+        <FormControl>
+          <FormLabel>Insurance Card</FormLabel>
+          {Array.isArray(form.insurance_card_image)
+            ? form.insurance_card_image.map((url, idx) => (
+                <Button as="a" href={url} target="_blank" colorScheme="purple" mb={2} mr={2} key={idx}>
+                  View Insurance {form.insurance_card_image.length > 1 ? idx + 1 : ''}
+                </Button>
+              ))
+            : form.insurance_card_image ? (
+                <Button as="a" href={form.insurance_card_image} target="_blank" colorScheme="purple" mb={2}>
+                  View Insurance
+                </Button>
+              ) : null}
+        </FormControl>
+        <FormControl>
+          <FormLabel>Patient ID</FormLabel>
+          {Array.isArray(form.patient_id_image)
+            ? form.patient_id_image.map((url, idx) => (
+                <Button as="a" href={url} target="_blank" colorScheme="orange" mb={2} mr={2} key={idx}>
+                  View Patient ID {form.patient_id_image.length > 1 ? idx + 1 : ''}
+                </Button>
+              ))
+            : form.patient_id_image ? (
+                <Button as="a" href={form.patient_id_image} target="_blank" colorScheme="orange" mb={2}>
+                  View Patient ID
+                </Button>
+              ) : null}
         </FormControl>
       </VStack>
       <HStack mt={8} spacing={4}>

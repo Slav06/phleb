@@ -227,27 +227,38 @@ function SubmissionsList() {
           </Tr>
         </Thead>
         <Tbody>
-          {validSubmissions.map((submission, idx) => (
+          {filteredSubmissions.map((submission, idx) => (
             <Tr key={submission.id}
               bg={idx % 2 === 0 ? 'white' : 'gray.100'}
               _hover={{ bg: 'blue.50' }}
             >
               <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">{new Date(submission.submitted_at).toLocaleDateString()}</Td>
-              <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">{submission.id}</Td>
+              <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">{submission.draw_code || submission.id}</Td>
               <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">{submission.patient_name || 'N/A'}</Td>
-              <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">{submission.patient_id_url ? (<Button as="a" href={submission.patient_id_url} target="_blank" leftIcon={<AttachmentIcon />} size="md" colorScheme="blue" variant="outline" px={2} py={0.5} fontWeight="bold">View</Button>) : (<Text color="gray.400">No file</Text>)}</Td>
+              <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">
+                {Array.isArray(submission.patient_id_image)
+                  ? submission.patient_id_image.map((url, i) => (
+                      <Button as="a" href={url} download target="_blank" leftIcon={<AttachmentIcon />} size="md" colorScheme="blue" variant="outline" px={2} py={0.5} fontWeight="bold" mr={1} mb={1} key={i}>Download {submission.patient_id_image.length > 1 ? i + 1 : ''}</Button>
+                    ))
+                  : submission.patient_id_image ? (
+                      <Button as="a" href={submission.patient_id_image} download target="_blank" leftIcon={<AttachmentIcon />} size="md" colorScheme="blue" variant="outline" px={2} py={0.5} fontWeight="bold">Download</Button>
+                    ) : (<Text color="gray.400">No file</Text>)}
+              </Td>
               <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">{submission.phlebotomist_name || 'N/A'}</Td>
               <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center" bg={
                 submission.status === 'completed'
                   ? 'green.300'
                   : submission.status === 'cancelled'
                   ? 'red.400'
+                  : submission.status === 'in_progress'
+                  ? 'gray.300'
                   : 'yellow.300'
               } color={
                 submission.status === 'cancelled' ? 'white' : 'black'
               }>
                 <Box w="100%" h="100%" display="flex" alignItems="center" justifyContent="center" fontWeight="bold" fontSize="xl">
                   {submission.status}
+                  {submission.status === 'in_progress' && <Badge colorScheme="gray" ml={2}>Draft</Badge>}
                 </Box>
               </Td>
               <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">
@@ -256,7 +267,7 @@ function SubmissionsList() {
                     <Button
                       as="a"
                       href={submission.fedex_label_url}
-                      target="_blank"
+                      download target="_blank"
                       leftIcon={<AttachmentIcon />}
                       size="md"
                       colorScheme="blue"
@@ -289,7 +300,7 @@ function SubmissionsList() {
                   <Button
                     as="a"
                     href={submission.lab_results_url}
-                    target="_blank"
+                    download target="_blank"
                     leftIcon={<AttachmentIcon />}
                     size="md"
                     colorScheme="green"
@@ -311,8 +322,24 @@ function SubmissionsList() {
                   />
                 )}
               </Td>
-              <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">{submission.insurance_card_url ? (<Button as="a" href={submission.insurance_card_url} target="_blank" leftIcon={<AttachmentIcon />} size="md" colorScheme="blue" variant="outline" px={2} py={0.5} fontWeight="bold">View</Button>) : (<Text color="gray.400">No file</Text>)}</Td>
-              <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">{submission.patient_id_url ? (<Button as="a" href={submission.patient_id_url} target="_blank" leftIcon={<AttachmentIcon />} size="md" colorScheme="blue" variant="outline" px={2} py={0.5} fontWeight="bold">Download</Button>) : (<Text color="gray.400">No file</Text>)}</Td>
+              <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">
+                {Array.isArray(submission.insurance_card_image)
+                  ? submission.insurance_card_image.map((url, i) => (
+                      <Button as="a" href={url} download target="_blank" leftIcon={<AttachmentIcon />} size="md" colorScheme="blue" variant="outline" px={2} py={0.5} fontWeight="bold" mr={1} mb={1} key={i}>View {submission.insurance_card_image.length > 1 ? i + 1 : ''}</Button>
+                    ))
+                  : submission.insurance_card_image ? (
+                      <Button as="a" href={submission.insurance_card_image} download target="_blank" leftIcon={<AttachmentIcon />} size="md" colorScheme="blue" variant="outline" px={2} py={0.5} fontWeight="bold">View</Button>
+                    ) : (<Text color="gray.400">No file</Text>)}
+              </Td>
+              <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">
+                {Array.isArray(submission.script_image)
+                  ? submission.script_image.map((url, i) => (
+                      <Button as="a" href={url} download target="_blank" leftIcon={<AttachmentIcon />} size="md" colorScheme="purple" variant="outline" px={2} py={0.5} fontWeight="bold" mr={1} mb={1} key={i}>View Script {submission.script_image.length > 1 ? i + 1 : ''}</Button>
+                    ))
+                  : submission.script_image ? (
+                      <Button as="a" href={submission.script_image} download target="_blank" leftIcon={<AttachmentIcon />} size="md" colorScheme="purple" variant="outline" px={2} py={0.5} fontWeight="bold">View Script</Button>
+                    ) : (<Text color="gray.400">No file</Text>)}
+              </Td>
               <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center" bg={submission.deleted_by_lab ? 'red.400' : idx % 2 === 0 ? 'white' : 'gray.100'} color={submission.deleted_by_lab ? 'white' : 'black'}>
                 <Box w="100%" h="100%" display="flex" alignItems="center" justifyContent="center" fontWeight="bold" fontSize="xl">
                   {submission.deleted_by_lab ? 'DELETED BY LAB' : ''}
@@ -356,11 +383,11 @@ function SubmissionsList() {
       {/* Mobile Cards */}
       <Box display={{ base: 'block', md: 'none' }}>
         <VStack spacing={4} align="stretch">
-          {validSubmissions.map((submission, idx) => (
+          {filteredSubmissions.map((submission, idx) => (
             <Box key={submission.id} p={4} borderWidth={1} borderRadius="lg" boxShadow="sm" bg={idx % 2 === 0 ? 'white' : 'gray.100'}>
               <Box fontWeight="bold" fontSize="lg">Draw #{submission.id} - {new Date(submission.submitted_at).toLocaleDateString()}</Box>
               <Box>Patient: <b>{submission.patient_name || 'N/A'}</b></Box>
-              <Box>Patient ID: <b>{submission.patient_id_url ? 'View' : 'No file'}</b></Box>
+              <Box>Patient ID: <b>{Array.isArray(submission.patient_id_image) ? 'Multiple files' : submission.patient_id_image ? 'View' : 'No file'}</b></Box>
               <Box>Phlebotomist: <b>{submission.phlebotomist_name || 'N/A'}</b></Box>
               <Box>Status: <b>{submission.status}</b></Box>
               <Box mt={2} mb={2}>
@@ -376,7 +403,7 @@ function SubmissionsList() {
                     <Box as="span" display="flex" alignItems="center" borderWidth={2} borderStyle="dashed" borderRadius="lg" p={2} cursor="pointer" _hover={{ borderColor: 'blue.400' }}>
                       <FaCloudUploadAlt style={{ marginRight: 8 }} />
                       {submission.fedex_label_url ? (
-                        <Button as="a" href={submission.fedex_label_url} target="_blank" size="sm" colorScheme="blue" ml={2}>View FedEx</Button>
+                        <Button as="a" href={submission.fedex_label_url} download target="_blank" size="sm" colorScheme="blue" ml={2}>View FedEx</Button>
                       ) : (
                         <Box color="gray.500">Upload FedEx Label</Box>
                       )}
@@ -397,7 +424,7 @@ function SubmissionsList() {
                     <Box as="span" display="flex" alignItems="center" borderWidth={2} borderStyle="dashed" borderRadius="lg" p={2} cursor="pointer" _hover={{ borderColor: 'green.400' }}>
                       <FaCloudUploadAlt style={{ marginRight: 8 }} />
                       {submission.lab_results_url ? (
-                        <Button as="a" href={submission.lab_results_url} target="_blank" size="sm" colorScheme="green" ml={2}>View Results</Button>
+                        <Button as="a" href={submission.lab_results_url} download target="_blank" size="sm" colorScheme="green" ml={2}>View Results</Button>
                       ) : (
                         <Box color="gray.500">Upload Lab Results</Box>
                       )}

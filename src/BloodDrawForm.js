@@ -36,6 +36,7 @@ import { useParams, useLocation, Link as RouterLink, useSearchParams } from 'rea
 import { analyzeImage } from './aiService'; // Import the AI service
 import { CheckCircleIcon, WarningIcon } from '@chakra-ui/icons';
 import { useNavigate } from 'react-router-dom';
+import { useDebounce } from 'use-debounce';
 
 const initialState = {
   patientName: '',
@@ -49,8 +50,9 @@ const initialState = {
   doctorEmail: '',
   labBrand: '',
   bloodCollectionTime: '',
-  scriptImage: null,
-  insuranceCardImage: null,
+  scriptImage: [],
+  insuranceCardImage: [],
+  patientIdImage: [],
   insuranceCompany: '',
   insurancePolicyNumber: '',
   needFedexLabel: false,
@@ -73,41 +75,45 @@ const steps = [
 ];
 
 // DropZone component for drag-and-drop file upload with glassmorphism, animation, and remove button
-const DropZone = ({ label, file, setFile, preview, setPreview, mb, icon }) => {
+const DropZone = ({ label, file, setFile, preview, setPreview, mb, icon, handleUpload }) => {
   const inputRef = React.useRef();
   const [dragActive, setDragActive] = useState(false);
   const bgColor = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.600');
   const hoverBorderColor = useColorModeValue('blue.400', 'blue.300');
 
-  const handleDrop = (e) => {
+  // Support multiple files
+  const handleDrop = async (e) => {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      setFile(e.dataTransfer.files[0]);
-      setPreview(URL.createObjectURL(e.dataTransfer.files[0]));
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const files = Array.from(e.dataTransfer.files);
+      setFile(prev => [...(prev || []), ...files]);
+      setPreview(prev => [...(prev || []), ...files.map(f => URL.createObjectURL(f))]);
+      if (handleUpload) await handleUpload(files);
     }
   };
 
   const handleDrag = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (e.type === 'dragenter' || e.type === 'dragover') setDragActive(true);
-    else if (e.type === 'dragleave') setDragActive(false);
+    if (e.type === 'dragenter' || e.type === 'dragleave' || e.type === 'dragover') setDragActive(true);
+    else setDragActive(false);
   };
 
-  const handleChange = (e) => {
-    if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
-      setPreview(URL.createObjectURL(e.target.files[0]));
+  const handleChange = async (e) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const files = Array.from(e.target.files);
+      setFile(prev => [...(prev || []), ...files]);
+      setPreview(prev => [...(prev || []), ...files.map(f => URL.createObjectURL(f))]);
+      if (handleUpload) await handleUpload(files);
     }
   };
 
-  const handleRemove = (e) => {
-    e.stopPropagation();
-    setFile(null);
-    setPreview(null);
+  const handleRemove = (idx) => {
+    setFile((prev) => prev.filter((_, i) => i !== idx));
+    setPreview((prev) => prev.filter((_, i) => i !== idx));
     if (inputRef.current) inputRef.current.value = '';
   };
 
@@ -129,10 +135,7 @@ const DropZone = ({ label, file, setFile, preview, setPreview, mb, icon }) => {
         borderRadius="xl"
         bg="gray.100"
         borderColor={dragActive ? 'blue.400' : 'gray.300'}
-        _hover={{
-          borderColor: 'blue.400',
-          transform: 'scale(1.02)',
-        }}
+        _hover={{ borderColor: 'blue.400', transform: 'scale(1.02)' }}
         transition="all 0.3s"
         cursor="pointer"
         position="relative"
@@ -145,32 +148,39 @@ const DropZone = ({ label, file, setFile, preview, setPreview, mb, icon }) => {
             ref={inputRef}
             type="file"
             accept="image/*"
+            multiple
             style={{ display: 'none' }}
             onChange={handleChange}
           />
-          {preview && (
-            <Box position="relative" mt={4}>
-              <Image
-                src={preview}
-                alt="Preview"
-                borderRadius="xl"
-                maxH="160px"
-                objectFit="contain"
-                borderWidth={1}
-                borderColor="gray.300"
-                bg="white"
-              />
-              <IconButton
-                icon={<FaTimes />}
-                position="absolute"
-                top={-2}
-                right={-2}
-                colorScheme="red"
-                size="sm"
-                isRound
-                onClick={handleRemove}
-                aria-label="Remove image"
-              />
+          {preview && preview.length > 0 && (
+            <Box position="relative" mt={4} w="100%">
+              <HStack spacing={4} wrap="wrap">
+                {preview.map((src, idx) => (
+                  <Box key={idx} position="relative">
+                    <Image
+                      src={src}
+                      alt={`Preview ${idx + 1}`}
+                      borderRadius="xl"
+                      maxH="120px"
+                      objectFit="contain"
+                      borderWidth={1}
+                      borderColor="gray.300"
+                      bg="white"
+                    />
+                    <IconButton
+                      icon={<FaTimes />}
+                      position="absolute"
+                      top={-2}
+                      right={-2}
+                      colorScheme="red"
+                      size="sm"
+                      isRound
+                      onClick={(e) => { e.stopPropagation(); handleRemove(idx); }}
+                      aria-label="Remove image"
+                    />
+                  </Box>
+                ))}
+              </HStack>
             </Box>
           )}
         </VStack>
@@ -242,12 +252,23 @@ function mapFormToDb(form, labInfo, labId) {
   };
 }
 
+// Utility to generate a random draw code
+function generateDrawCode(length = 4) {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let result = '';
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
 export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
   const [form, setForm] = useState(initialState);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
-  const [scriptPreview, setScriptPreview] = useState(null);
-  const [insurancePreview, setInsurancePreview] = useState(null);
+  const [scriptPreview, setScriptPreview] = useState([]);
+  const [insurancePreview, setInsurancePreview] = useState([]);
+  const [patientIdPreview, setPatientIdPreview] = useState([]);
   const [step, setStep] = useState(0);
   const [labInfo, setLabInfo] = useState(null);
   const [pastRequests, setPastRequests] = useState([]);
@@ -272,8 +293,11 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
   const [needFedexLabelChoice, setNeedFedexLabelChoice] = useState(null);
   const [showPatientDoctorLab, setShowPatientDoctorLab] = useState(false);
   const [showInsuranceInfo, setShowInsuranceInfo] = useState(false);
-  const [patientIdPreview, setPatientIdPreview] = useState(null);
   const [showPatientInfo, setShowPatientInfo] = useState(false);
+  const [doctorSearch, setDoctorSearch] = useState('');
+  const [debouncedDoctorSearch] = useDebounce(doctorSearch, 300);
+  const [doctorOptions, setDoctorOptions] = useState([]);
+  const [doctorLoading, setDoctorLoading] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -340,16 +364,34 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
     setLoading(true);
     try {
       let newSubmissionId = submissionId;
-      const dbData = { ...mapFormToDb(form, labInfo, id), status: 'pending', submitted_at: new Date().toISOString() };
+      let newDrawCode = form.drawCode;
+      // If creating a new submission, generate a draw code
+      if (!submissionId) {
+        newDrawCode = generateDrawCode();
+      }
+      // Upload all files and get URLs
+      const scriptUrls = await handleImageUpload(form.scriptImage, 'script', newDrawCode);
+      const insuranceUrls = await handleImageUpload(form.insuranceCardImage, 'insurance', newDrawCode);
+      const patientIdUrls = await handleImageUpload(form.patientIdImage, 'patient-id', newDrawCode);
+      const dbData = {
+        ...mapFormToDb(form, labInfo, id),
+        script_image: scriptUrls,
+        insurance_card_image: insuranceUrls,
+        patient_id_image: patientIdUrls,
+        status: 'pending',
+        submitted_at: new Date().toISOString(),
+        draw_code: newDrawCode,
+      };
       if (submissionId && submissionId > 0) {
         const { error } = await supabase.from('submissions').update(dbData).eq('id', submissionId);
         if (error) throw error;
       } else {
-        const { data, error } = await supabase.from('submissions').insert([dbData]).select('id').single();
+        const { data, error } = await supabase.from('submissions').insert([dbData]).select('id,draw_code').single();
         if (error) throw error;
         if (data && data.id) {
           newSubmissionId = Number(data.id);
           setSubmissionId(newSubmissionId);
+          setForm(f => ({ ...f, drawCode: data.draw_code }));
         }
       }
       // Log to admin_activity_log
@@ -358,7 +400,7 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
           {
             action: 'Created Blood Draw Submission',
             username: labInfo.company_name || labInfo.full_name || labInfo.email,
-            details: `Patient: ${form.patientName || form.patient_name || ''}, Submission ID: ${newSubmissionId}`,
+            details: `Patient: ${form.patientName || form.patient_name || ''}, Submission ID: ${newDrawCode}`,
             created_at: new Date().toISOString(),
           },
         ]);
@@ -369,13 +411,14 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
       }
       setMessage({ type: 'success', text: 'Form submitted successfully!' });
       setForm(initialState);
-      setScriptPreview(null);
-      setInsurancePreview(null);
+      setScriptPreview([]);
+      setInsurancePreview([]);
+      setPatientIdPreview([]);
       setStep(0);
       setSubmissionId(null);
       isDraftCreated.current = false;
       setTimeout(() => {
-        navigate(`/lab/${id}/summary/${newSubmissionId}`);
+        navigate(`/lab/${id}/summary/${newDrawCode}`);
       }, 1000);
     } catch (err) {
       setMessage({ type: 'error', text: 'An error occurred. Please try again.' });
@@ -384,57 +427,65 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
     }
   };
 
-  const handleImageUpload = async (file, type) => {
-    if (!file) return;
-    // Ensure a draft exists before uploading
+  const handleImageUpload = async (files, type, drawCodeOverride) => {
+    if (!files || files.length === 0) return [];
     let currentSubmissionId = submissionId;
+    let currentDrawCode = form.drawCode || drawCodeOverride;
     if (!currentSubmissionId) {
       // Create a draft
       const { data: draft, error: draftError } = await supabase.from('submissions').insert([
-        { lab_id: id, status: 'in_progress', submitted_at: new Date().toISOString() }
-      ]).select('id').single();
+        { lab_id: id, status: 'in_progress', submitted_at: new Date().toISOString(), draw_code: currentDrawCode }
+      ]).select('id,draw_code').single();
       if (draftError || !draft || !draft.id) {
         toast({ title: 'Draft creation failed', description: draftError?.message || 'Unknown error', status: 'error' });
-        return;
+        return [];
       }
       setSubmissionId(Number(draft.id));
+      setForm(f => ({ ...f, drawCode: draft.draw_code }));
       setSearchParams({ submissionId: draft.id });
       currentSubmissionId = draft.id;
+      currentDrawCode = draft.draw_code;
     }
     let bucket = '';
     let column = '';
     if (type === 'script') {
       bucket = 'scripts';
-      column = 'script_url';
+      column = 'script_image';
     } else if (type === 'insurance') {
       bucket = 'insurance-cards';
-      column = 'insurance_card_url';
+      column = 'insurance_card_image';
     } else if (type === 'patient-id') {
       bucket = 'patient-ids';
-      column = 'patient_id_url';
+      column = 'patient_id_image';
     } else {
-      return;
+      return [];
     }
-    const fileExt = file.name.split('.').pop();
-    const filePath = `${bucket}/${currentSubmissionId}.${fileExt}`;
-    // Upload to Supabase Storage
-    const { error: uploadError } = await supabase.storage.from(bucket).upload(filePath, file, { upsert: true });
-    if (uploadError) {
-      toast({ title: 'Upload failed', description: uploadError.message, status: 'error' });
-      return;
-    }
-    // Get public URL
-    const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(filePath);
-    if (urlData && urlData.publicUrl) {
-      // Update submission record
-      const { error: updateError } = await supabase.from('submissions').update({ [column]: urlData.publicUrl }).eq('id', currentSubmissionId);
-      if (updateError) {
-        toast({ title: 'Error saving file URL', description: updateError.message, status: 'error' });
-        return;
+    // Fetch current URLs from form state
+    let currentUrls = form[column] || [];
+    if (!Array.isArray(currentUrls)) currentUrls = [];
+    // Upload new files and get their URLs
+    const newUrls = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const fileExt = file.name.split('.').pop();
+      const filePath = `${bucket}/${currentDrawCode}_${Date.now()}_${i}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage.from(bucket).upload(filePath, file, { upsert: true });
+      if (uploadError) {
+        toast({ title: 'Upload failed', description: uploadError.message, status: 'error' });
+        continue;
       }
-      setForm(f => ({ ...f, [column]: urlData.publicUrl }));
-      toast({ title: 'File uploaded', status: 'success' });
+      const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(filePath);
+      if (urlData && urlData.publicUrl) {
+        newUrls.push(urlData.publicUrl);
+      }
     }
+    // Combine old and new URLs
+    const allUrls = [...currentUrls, ...newUrls];
+    // Update submission record with combined array of URLs
+    await supabase.from('submissions').update({ [column]: allUrls }).eq('id', currentSubmissionId);
+    setForm(f => ({ ...f, [column]: allUrls }));
+    toast({ title: 'Files uploaded', status: 'success' });
+    return allUrls;
   };
 
   // Fetch delivery templates from Supabase on mount
@@ -559,14 +610,15 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
               <DropZone
                 label="Upload Doctor's Script"
                 file={form.scriptImage}
-                setFile={(file) => {
-                  setForm((f) => ({ ...f, scriptImage: file }));
-                  handleImageUpload(file, 'script');
-                }}
+                setFile={(files) => setForm((f) => ({ ...f, scriptImage: files }))}
                 preview={scriptPreview}
                 setPreview={setScriptPreview}
                 mb={4}
                 icon={FaStethoscope}
+                handleUpload={async (files) => {
+                  const urls = await handleImageUpload(files, 'script');
+                  setForm(f => ({ ...f, scriptImage: urls }));
+                }}
               />
               {/* Move Patient/Doctor/Lab Info here */}
               <Button
@@ -584,7 +636,61 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
                 <Box p={4} bg="gray.50" borderRadius="md" boxShadow="sm">
                   <Grid templateColumns={'1fr'} gap={6}>
                     <GridItem>
-                      <FloatingInput label="Doctor Name" id="doctorName" name="doctorName" value={form.doctorName} onChange={handleChange} />
+                      <FormControl position="relative">
+                        <FormLabel>Doctor Name</FormLabel>
+                        <Input
+                          value={form.doctorName}
+                          onChange={e => {
+                            setForm(f => ({ ...f, doctorName: e.target.value }));
+                            setDoctorSearch(e.target.value);
+                          }}
+                          placeholder="Type to search or add doctor"
+                          autoComplete="off"
+                          name="doctorName"
+                          id="doctorName"
+                        />
+                        {doctorLoading && <Text fontSize="sm" color="gray.500">Searching...</Text>}
+                        {doctorOptions.length > 0 && doctorSearch && (
+                          <Box
+                            borderWidth={2}
+                            borderColor="blue.400"
+                            boxShadow="lg"
+                            borderRadius="md"
+                            bg="white"
+                            mt={1}
+                            maxH="260px"
+                            minW="320px"
+                            width="100%"
+                            overflowY="auto"
+                            zIndex={20}
+                            position="absolute"
+                            left={0}
+                          >
+                            <Box textAlign="right" px={2} py={1}>
+                              <Button size="xs" variant="ghost" colorScheme="gray" onClick={() => { setDoctorOptions([]); setDoctorSearch(''); }}>✕</Button>
+                            </Box>
+                            {doctorOptions.map((doc) => (
+                              <Box
+                                key={doc.id}
+                                px={4}
+                                py={3}
+                                _hover={{ bg: 'blue.50', cursor: 'pointer' }}
+                                borderBottom="1px solid #e0e0e0"
+                                fontSize="md"
+                                onClick={() => {
+                                  handleDoctorSelect(doc);
+                                  setDoctorOptions([]);
+                                  setDoctorSearch('');
+                                }}
+                              >
+                                <Text fontWeight="bold">{doc.full_name} {doc.clinic_name ? `(${doc.clinic_name})` : ''}</Text>
+                                <Text fontSize="sm" color="gray.600">{doc.address || 'No address'}</Text>
+                                <Text fontSize="sm" color="gray.600">{doc.phone || 'No phone'} | {doc.email || 'No email'}</Text>
+                              </Box>
+                            ))}
+                          </Box>
+                        )}
+                      </FormControl>
                     </GridItem>
                     <GridItem>
                       <FloatingInput label="Doctor Address" id="doctorAddress" name="doctorAddress" value={form.doctorAddress} onChange={handleChange} />
@@ -632,13 +738,14 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
               <DropZone
                 label="Upload Insurance Card"
                 file={form.insuranceCardImage}
-                setFile={(file) => {
-                  setForm((f) => ({ ...f, insuranceCardImage: file }));
-                  handleImageUpload(file, 'insurance');
-                }}
+                setFile={(files) => setForm((f) => ({ ...f, insuranceCardImage: files }))}
                 preview={insurancePreview}
                 setPreview={setInsurancePreview}
                 icon={FaIdCard}
+                handleUpload={async (files) => {
+                  const urls = await handleImageUpload(files, 'insurance');
+                  setForm(f => ({ ...f, insuranceCardImage: urls }));
+                }}
               />
               <Button
                 onClick={() => setShowInsuranceInfo((v) => !v)}
@@ -696,14 +803,15 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
               <DropZone
                 label="Upload Patient ID"
                 file={form.patientIdImage}
-                setFile={(file) => {
-                  setForm((f) => ({ ...f, patientIdImage: file }));
-                  handleImageUpload(file, 'patient-id');
-                }}
+                setFile={(files) => setForm((f) => ({ ...f, patientIdImage: files }))}
                 preview={patientIdPreview}
                 setPreview={setPatientIdPreview}
                 mb={4}
                 icon={FaAddressCard}
+                handleUpload={async (files) => {
+                  const urls = await handleImageUpload(files, 'patient-id');
+                  setForm(f => ({ ...f, patientIdImage: urls }));
+                }}
               />
               <Button
                 onClick={() => setShowPatientInfo((v) => !v)}
@@ -1024,6 +1132,38 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
     // eslint-disable-next-line
   }, [id, submissionIdFromUrl]);
 
+  useEffect(() => {
+    const fetchDoctors = async () => {
+      if (!debouncedDoctorSearch) {
+        setDoctorOptions([]);
+        return;
+      }
+      setDoctorLoading(true);
+      const { data, error } = await supabase
+        .from('doctors')
+        .select('*')
+        .ilike('full_name', `%${debouncedDoctorSearch}%`)
+        .limit(10);
+      if (!error && data) {
+        setDoctorOptions(data);
+      } else {
+        setDoctorOptions([]);
+      }
+      setDoctorLoading(false);
+    };
+    fetchDoctors();
+  }, [debouncedDoctorSearch]);
+
+  const handleDoctorSelect = (doctor) => {
+    setForm((prev) => ({
+      ...prev,
+      doctorName: doctor.full_name,
+      doctorAddress: doctor.address || '',
+      doctorPhone: doctor.phone || '',
+      doctorEmail: doctor.email || '',
+    }));
+  };
+
   return (
     <Box minH="100vh" bg="gray.50" color="gray.800" py={8}>
       <Container maxW="container.md">
@@ -1037,14 +1177,15 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
             <DropZone
               label="Upload Doctor's Script"
               file={form.scriptImage}
-              setFile={(file) => {
-                setForm((f) => ({ ...f, scriptImage: file }));
-                handleImageUpload(file, 'script');
-              }}
+              setFile={(files) => setForm((f) => ({ ...f, scriptImage: files }))}
               preview={scriptPreview}
               setPreview={setScriptPreview}
               mb={4}
               icon={FaStethoscope}
+              handleUpload={async (files) => {
+                const urls = await handleImageUpload(files, 'script');
+                setForm(f => ({ ...f, scriptImage: urls }));
+              }}
             />
             {/* Move Patient/Doctor/Lab Info here */}
             <Button
@@ -1062,7 +1203,61 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
               <Box p={4} bg="gray.50" borderRadius="md" boxShadow="sm">
                 <Grid templateColumns={'1fr'} gap={6}>
                   <GridItem>
-                    <FloatingInput label="Doctor Name" id="doctorName" name="doctorName" value={form.doctorName} onChange={handleChange} />
+                    <FormControl position="relative">
+                      <FormLabel>Doctor Name</FormLabel>
+                      <Input
+                        value={form.doctorName}
+                        onChange={e => {
+                          setForm(f => ({ ...f, doctorName: e.target.value }));
+                          setDoctorSearch(e.target.value);
+                        }}
+                        placeholder="Type to search or add doctor"
+                        autoComplete="off"
+                        name="doctorName"
+                        id="doctorName"
+                      />
+                      {doctorLoading && <Text fontSize="sm" color="gray.500">Searching...</Text>}
+                      {doctorOptions.length > 0 && doctorSearch && (
+                        <Box
+                          borderWidth={2}
+                          borderColor="blue.400"
+                          boxShadow="lg"
+                          borderRadius="md"
+                          bg="white"
+                          mt={1}
+                          maxH="260px"
+                          minW="320px"
+                          width="100%"
+                          overflowY="auto"
+                          zIndex={20}
+                          position="absolute"
+                          left={0}
+                        >
+                          <Box textAlign="right" px={2} py={1}>
+                            <Button size="xs" variant="ghost" colorScheme="gray" onClick={() => { setDoctorOptions([]); setDoctorSearch(''); }}>✕</Button>
+                          </Box>
+                          {doctorOptions.map((doc) => (
+                            <Box
+                              key={doc.id}
+                              px={4}
+                              py={3}
+                              _hover={{ bg: 'blue.50', cursor: 'pointer' }}
+                              borderBottom="1px solid #e0e0e0"
+                              fontSize="md"
+                              onClick={() => {
+                                handleDoctorSelect(doc);
+                                setDoctorOptions([]);
+                                setDoctorSearch('');
+                              }}
+                            >
+                              <Text fontWeight="bold">{doc.full_name} {doc.clinic_name ? `(${doc.clinic_name})` : ''}</Text>
+                              <Text fontSize="sm" color="gray.600">{doc.address || 'No address'}</Text>
+                              <Text fontSize="sm" color="gray.600">{doc.phone || 'No phone'} | {doc.email || 'No email'}</Text>
+                            </Box>
+                          ))}
+                        </Box>
+                      )}
+                    </FormControl>
                   </GridItem>
                   <GridItem>
                     <FloatingInput label="Doctor Address" id="doctorAddress" name="doctorAddress" value={form.doctorAddress} onChange={handleChange} />
@@ -1104,13 +1299,14 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
             <DropZone
               label="Upload Insurance Card"
               file={form.insuranceCardImage}
-              setFile={(file) => {
-                setForm((f) => ({ ...f, insuranceCardImage: file }));
-                handleImageUpload(file, 'insurance');
-              }}
+              setFile={(files) => setForm((f) => ({ ...f, insuranceCardImage: files }))}
               preview={insurancePreview}
               setPreview={setInsurancePreview}
               icon={FaIdCard}
+              handleUpload={async (files) => {
+                const urls = await handleImageUpload(files, 'insurance');
+                setForm(f => ({ ...f, insuranceCardImage: urls }));
+              }}
             />
             <Button
               onClick={() => setShowInsuranceInfo((v) => !v)}
@@ -1168,14 +1364,15 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
             <DropZone
               label="Upload Patient ID"
               file={form.patientIdImage}
-              setFile={(file) => {
-                setForm((f) => ({ ...f, patientIdImage: file }));
-                handleImageUpload(file, 'patient-id');
-              }}
+              setFile={(files) => setForm((f) => ({ ...f, patientIdImage: files }))}
               preview={patientIdPreview}
               setPreview={setPatientIdPreview}
               mb={4}
               icon={FaAddressCard}
+              handleUpload={async (files) => {
+                const urls = await handleImageUpload(files, 'patient-id');
+                setForm(f => ({ ...f, patientIdImage: urls }));
+              }}
             />
             <Button
               onClick={() => setShowPatientInfo((v) => !v)}
@@ -1343,7 +1540,7 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
             colorScheme="blue"
             size="lg"
             onClick={handleSubmit}
-            isDisabled={!(form.scriptImage || form.insuranceCardImage || form.patientName || form.patientEmail)}
+            isDisabled={!(form.scriptImage.length > 0 || form.insuranceCardImage.length > 0 || form.patientName || form.patientEmail)}
           >
             Complete
           </Button>
