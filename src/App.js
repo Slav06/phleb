@@ -25,6 +25,7 @@ import AdminLayout from './layouts/AdminLayout';
 import AdminDashboard from './components/admin/AdminDashboard';
 import UserManagement from './components/admin/UserManagement';
 import PhlebotomistManagement from './components/admin/PhlebotomistManagement';
+import LabManagement from './components/admin/LabManagement';
 import SubmissionsList from './components/admin/SubmissionsList';
 import SubmissionDetail from './components/admin/SubmissionDetail';
 import AdminLogin from './components/admin/AdminLogin';
@@ -32,19 +33,6 @@ import DoctorManagement from './components/admin/DoctorManagement';
 
 // Shared Components
 import Navigation from './components/shared/Navigation';
-
-// Add this component before the App component
-function MobileLabRouteGuard({ children }) {
-  const location = useLocation();
-  const labId = location.pathname.split('/')[2]; // Get lab ID from URL
-
-  // If trying to access landing page or any other route without lab ID, redirect to their portal
-  if (!labId || location.pathname === '/') {
-    return <Navigate to={`/lab/${labId}`} replace />;
-  }
-
-  return children;
-}
 
 // Add this component before the App component
 function AdminRouteGuard({ children }) {
@@ -70,7 +58,6 @@ function App() {
       <CSSReset />
       <Router>
         <Routes>
-          {/* Landing Page - Only accessible if not a mobile lab user */}
           <Route path="/" element={<NewLandingPage />} />
 
           {/* Patient Routes */}
@@ -81,11 +68,7 @@ function App() {
           </Route>
 
           {/* Phlebotomist Routes (scoped by lab id) */}
-          <Route path="/lab/:id/*" element={
-            <MobileLabRouteGuard>
-              <PhlebotomistLayout />
-            </MobileLabRouteGuard>
-          }> 
+          <Route path="/lab/:id/*" element={<PhlebotomistLayout />}> 
             <Route index element={<PhlebotomistDashboard />} />
             <Route path="new-blood-draw" element={<BloodDrawForm />} />
             <Route path="working-hours" element={<WorkingHoursForm />} />
@@ -108,6 +91,7 @@ function App() {
             <Route index element={<AdminDashboard />} />
             <Route path="users" element={<UserManagement />} />
             <Route path="phlebotomists" element={<PhlebotomistManagement />} />
+            <Route path="labs" element={<LabManagement />} />
             <Route path="submissions" element={<SubmissionsList />} />
             <Route path="submissions/:id" element={<SubmissionDetail />} />
             <Route path="doctors" element={<DoctorManagement />} />

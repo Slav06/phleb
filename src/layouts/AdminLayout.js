@@ -10,7 +10,7 @@ import {
   Spacer,
 } from '@chakra-ui/react';
 import { Link as RouterLink, useNavigate, Outlet } from 'react-router-dom';
-import { FaHome, FaUsers, FaVials, FaFileMedical, FaUserMd } from 'react-icons/fa';
+import { FaHome, FaUsers, FaVials, FaFileMedical, FaUserMd, FaFlask } from 'react-icons/fa';
 
 function AdminLayout() {
   const navigate = useNavigate();
@@ -54,6 +54,17 @@ function AdminLayout() {
               fontSize="2xl"
               _hover={{ color: 'blue.200', bg: 'gray.700' }}
               title="Mobile Labs"
+            />
+            <IconButton
+              as={RouterLink}
+              to="/admin/labs"
+              icon={<FaFlask />}
+              aria-label="Lab Partnerships"
+              variant="ghost"
+              color="white"
+              fontSize="2xl"
+              _hover={{ color: 'blue.200', bg: 'gray.700' }}
+              title="Lab Partnerships"
             />
             <IconButton
               as={RouterLink}

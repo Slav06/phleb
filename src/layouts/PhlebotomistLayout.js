@@ -22,27 +22,39 @@ function PhlebotomistLayout() {
 
         console.log('PhlebotomistLayout fetched:', { data, error, pathname: location.pathname });
 
-        if (error) throw error;
+        if (error) {
+          console.error('Error fetching agreement status:', error);
+          // If there's an error, don't block access - let the component handle it
+          setLoading(false);
+          return;
+        }
 
         // If agreement is signed and user is on /agreement, redirect to dashboard
         if (data.agreement_signed && location.pathname.endsWith('/agreement')) {
-          navigate(`/lab/${id}`);
+          console.log('Agreement signed, redirecting to dashboard');
+          navigate(`/lab/${id}`, { replace: true });
           return;
         }
+        
         // If agreement not signed and not on /agreement, redirect to agreement page
         if (!data.agreement_signed && !location.pathname.endsWith('/agreement')) {
+          console.log('Agreement not signed, redirecting to agreement page');
           navigate(`/lab/${id}/agreement`, { replace: true });
           return;
         }
 
         setLoading(false);
       } catch (err) {
+        console.error('Error in checkAccess:', err);
         setError('Access denied');
         setLoading(false);
       }
     };
 
-    checkAccess();
+    // Add a small delay to ensure database updates have propagated
+    const timeoutId = setTimeout(checkAccess, 100);
+    
+    return () => clearTimeout(timeoutId);
   }, [id, navigate, location.pathname]);
 
   if (loading) {

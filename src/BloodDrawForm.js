@@ -37,6 +37,7 @@ import { analyzeImage } from './aiService'; // Import the AI service
 import { CheckCircleIcon, WarningIcon } from '@chakra-ui/icons';
 import { useNavigate } from 'react-router-dom';
 import { useDebounce } from 'use-debounce';
+import { getLabs, getTestTypesByLab } from './utils/labUtils';
 
 const initialState = {
   patientName: '',
@@ -48,7 +49,8 @@ const initialState = {
   doctorPhone: '',
   doctorFax: '',
   doctorEmail: '',
-  labBrand: '',
+  labId: '',
+  testTypeId: '',
   bloodCollectionTime: '',
   scriptImage: [],
   insuranceCardImage: [],
@@ -60,13 +62,6 @@ const initialState = {
   statTest: false,
   specialInstructions: '',
 };
-
-const labOptions = [
-  { value: '', label: 'Select lab brand' },
-  { value: 'Quest', label: 'Quest' },
-  { value: 'LabCorp', label: 'LabCorp' },
-  { value: 'Unbranded', label: 'Unbranded' },
-];
 
 const steps = [
   { label: 'Patient Info', icon: FaUser },
@@ -226,6 +221,10 @@ const FloatingInput = ({ label, id, ...props }) => (
 
 // Helper to map camelCase form fields to snake_case DB columns
 function mapFormToDb(form, labInfo, labId) {
+  // Check if current user is an admin
+  const adminUser = JSON.parse(localStorage.getItem('adminUser'));
+  const createdByUser = adminUser ? adminUser.name : 'LAB';
+  
   return {
     patient_name: form.patientName || '',
     patient_address: form.patientAddress || '',
@@ -236,10 +235,12 @@ function mapFormToDb(form, labInfo, labId) {
     doctor_phone: form.doctorPhone || '',
     doctor_fax: form.doctorFax || '',
     doctor_email: form.doctorEmail || '',
-    lab_brand: form.labBrand || '',
+    lab_id: form.labId || null,
+    test_type_id: form.testTypeId || null,
     blood_collection_time: form.bloodCollectionTime || '',
-    script_image: form.scriptImage || '',
-    insurance_card_image: form.insuranceCardImage || '',
+    script_image: Array.isArray(form.scriptImage) ? form.scriptImage : [],
+    insurance_card_image: Array.isArray(form.insuranceCardImage) ? form.insuranceCardImage : [],
+    patient_id_image: Array.isArray(form.patientIdImage) ? form.patientIdImage : [],
     insurance_company: form.insuranceCompany || '',
     insurance_policy_number: form.insurancePolicyNumber || '',
     need_fedex_label: form.needFedexLabel || false,
@@ -248,7 +249,8 @@ function mapFormToDb(form, labInfo, labId) {
     special_instructions: form.specialInstructions || '',
     phlebotomist_name: labInfo?.company_name || labInfo?.full_name || '',
     phlebotomist_email: labInfo?.email || '',
-    phlebotomist_id: labId,
+    phlebotomist_id: labId || null,
+    created_by_user: createdByUser,
   };
 }
 
@@ -298,13 +300,64 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
   const [debouncedDoctorSearch] = useDebounce(doctorSearch, 300);
   const [doctorOptions, setDoctorOptions] = useState([]);
   const [doctorLoading, setDoctorLoading] = useState(false);
+  const [labs, setLabs] = useState([]);
+  const [testTypes, setTestTypes] = useState([]);
+  const [labOptions, setLabOptions] = useState([]);
 
   useEffect(() => {
     if (id) {
       fetchLabInfo();
+      fetchLabs();
     }
     // eslint-disable-next-line
   }, [id]);
+
+  useEffect(() => {
+    if (form.labId) {
+      fetchTestTypes(form.labId);
+    } else {
+      setTestTypes([]);
+    }
+  }, [form.labId]);
+
+  const fetchLabs = async () => {
+    try {
+      const labsData = await getLabs();
+      setLabs(labsData);
+      setLabOptions([
+        { value: '', label: 'Select lab' },
+        ...labsData.map(lab => ({
+          value: lab.id,
+          label: lab.name
+        }))
+      ]);
+    } catch (error) {
+      console.error('Error fetching labs:', error);
+      toast({
+        title: 'Error loading labs',
+        description: error.message,
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    }
+  };
+
+  const fetchTestTypes = async (labId) => {
+    try {
+      const testTypesData = await getTestTypesByLab(labId);
+      setTestTypes(testTypesData);
+    } catch (error) {
+      console.error('Error fetching test types:', error);
+      toast({
+        title: 'Error loading test types',
+        description: error.message,
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    }
+  };
 
   const fetchLabInfo = async () => {
     try {
@@ -707,9 +760,28 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
                     <GridItem>
                       <FormControl>
                         <FormLabel>Lab Brand</FormLabel>
-                        <Select name="labBrand" value={form.labBrand} onChange={handleChange} placeholder="Select lab brand">
+                        <Select name="labId" value={form.labId} onChange={handleChange} placeholder="Select lab brand">
                           {labOptions.map((option) => (
                             <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    </GridItem>
+                    <GridItem>
+                      <FormControl>
+                        <FormLabel>Test Type</FormLabel>
+                        <Select 
+                          name="testTypeId" 
+                          value={form.testTypeId} 
+                          onChange={handleChange} 
+                          placeholder="Select test type"
+                          isDisabled={!form.labId}
+                        >
+                          <option value="">Select test type</option>
+                          {testTypes.map((testType) => (
+                            <option key={testType.id} value={testType.id}>
+                              {testType.name} - ${testType.cash_price} ({testType.tube_top_color} tube)
+                            </option>
                           ))}
                         </Select>
                       </FormControl>
@@ -1274,9 +1346,28 @@ export default function BloodDrawForm({ phlebotomistId, isPatientMode }) {
                   <GridItem>
                     <FormControl>
                       <FormLabel>Lab Brand</FormLabel>
-                      <Select name="labBrand" value={form.labBrand} onChange={handleChange} placeholder="Select lab brand">
+                      <Select name="labId" value={form.labId} onChange={handleChange} placeholder="Select lab brand">
                         {labOptions.map((option) => (
                           <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </GridItem>
+                  <GridItem>
+                    <FormControl>
+                      <FormLabel>Test Type</FormLabel>
+                      <Select 
+                        name="testTypeId" 
+                        value={form.testTypeId} 
+                        onChange={handleChange} 
+                        placeholder="Select test type"
+                        isDisabled={!form.labId}
+                      >
+                        <option value="">Select test type</option>
+                        {testTypes.map((testType) => (
+                          <option key={testType.id} value={testType.id}>
+                            {testType.name} - ${testType.cash_price} ({testType.tube_top_color} tube)
+                          </option>
                         ))}
                       </Select>
                     </FormControl>

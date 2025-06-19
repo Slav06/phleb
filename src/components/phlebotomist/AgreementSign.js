@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Box, Heading, Text, VStack, FormControl, FormLabel, Input, Button, useToast, HStack, VisuallyHidden } from '@chakra-ui/react';
+import { Box, Heading, Text, VStack, FormControl, FormLabel, Input, Button, useToast, HStack, VisuallyHidden, Spinner } from '@chakra-ui/react';
 import SignatureCanvas from 'react-signature-canvas';
 import jsPDF from 'jspdf';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -9,6 +9,8 @@ export default function AgreementSign() {
   const [companyName, setCompanyName] = useState('');
   const [printedName, setPrintedName] = useState('');
   const [signDate, setSignDate] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
   const sigPad = useRef();
   const toast = useToast();
   const navigate = useNavigate();
@@ -39,41 +41,92 @@ export default function AgreementSign() {
     console.log('handleSign called', { companyName, printedName, signDate, isSigned });
     console.log('labInfo:', labInfo);
     console.log('labInfo.id:', labInfo?.id);
-    // Generate the signature image (for possible future use, but do not download PDF)
-    let sigData = null;
-    if (sigPad.current) {
-      sigData = sigPad.current.getCanvas().toDataURL('image/png');
+    
+    if (!labInfo || !labInfo.id) {
+      toast({ title: 'Error', description: 'Lab information not found', status: 'error' });
+      return;
     }
-    // Save agreement_signed to the database
-    if (labInfo && labInfo.id) {
-      try {
-        const { error, data } = await supabase
-          .from('phlebotomist_profiles')
-          .update({
-            agreement_signed: true,
-            agreement_signed_at: new Date().toISOString(),
-            agreement_company_name: companyName,
-            agreement_printed_name: printedName,
-            agreement_date: signDate,
-            agreement_signature: sigData
-          })
-          .eq('id', labInfo.id);
-        console.log('Supabase update result', { error, data });
-        if (error) {
-          toast({ title: 'Error saving agreement', description: error.message, status: 'error' });
-          return;
-        }
-        toast({ title: 'Agreement signed!', status: 'success' });
-        // Add a delay before navigating to allow Supabase to propagate the update
-        setTimeout(() => {
-          navigate(`/lab/${labInfo.id}`);
-        }, 800);
-      } catch (err) {
-        console.error('Unexpected error in handleSign:', err);
-        toast({ title: 'Unexpected error', description: err.message, status: 'error' });
+
+    setIsSubmitting(true);
+    
+    try {
+      // Generate the signature image
+      let sigData = null;
+      if (sigPad.current) {
+        sigData = sigPad.current.getCanvas().toDataURL('image/png');
       }
+
+      // Save agreement_signed to the database
+      const { error, data } = await supabase
+        .from('phlebotomist_profiles')
+        .update({
+          agreement_signed: true,
+          agreement_signed_at: new Date().toISOString(),
+          agreement_company_name: companyName,
+          agreement_printed_name: printedName,
+          agreement_date: signDate,
+          agreement_signature: sigData
+        })
+        .eq('id', labInfo.id);
+
+      console.log('Supabase update result', { error, data });
+      
+      if (error) {
+        throw error;
+      }
+
+      setIsSuccess(true);
+      
+      toast({ 
+        title: 'Agreement signed successfully!', 
+        description: 'Redirecting to dashboard...',
+        status: 'success',
+        duration: 3000,
+        isClosable: true
+      });
+
+      // Navigate immediately after successful save
+      navigate(`/lab/${labInfo.id}`, { replace: true });
+      
+    } catch (err) {
+      console.error('Error in handleSign:', err);
+      toast({ 
+        title: 'Error saving agreement', 
+        description: err.message, 
+        status: 'error',
+        duration: 5000,
+        isClosable: true
+      });
+    } finally {
+      setIsSubmitting(false);
     }
   };
+
+  const handleManualRedirect = () => {
+    navigate(`/lab/${id}`, { replace: true });
+  };
+
+  // Show success message if agreement was signed
+  if (isSuccess) {
+    return (
+      <Box maxW="700px" mx="auto" mt={8} p={6} bg="white" borderRadius="xl" boxShadow="xl">
+        <VStack spacing={6} textAlign="center">
+          <Box color="green.500" fontSize="6xl">✓</Box>
+          <Heading size="lg" color="green.600">Agreement Signed Successfully!</Heading>
+          <Text fontSize="lg">Your business agreement has been signed and saved.</Text>
+          <Text fontSize="md" color="gray.600">You should be redirected to your dashboard automatically.</Text>
+          <Button 
+            colorScheme="blue" 
+            size="lg" 
+            onClick={handleManualRedirect}
+            mt={4}
+          >
+            Go to Dashboard
+          </Button>
+        </VStack>
+      </Box>
+    );
+  }
 
   return (
     <Box maxW="700px" mx="auto" mt={8} p={6} bg="white" borderRadius="xl" boxShadow="xl">
@@ -150,10 +203,13 @@ export default function AgreementSign() {
             !companyName ||
             !printedName ||
             !signDate ||
-            !isSigned
+            !isSigned ||
+            isSubmitting
           }
+          isLoading={isSubmitting}
+          loadingText="Saving Agreement..."
         >
-          Complete Agreement
+          {isSubmitting ? 'Saving...' : 'Complete Agreement'}
         </Button>
       </VStack>
     </Box>

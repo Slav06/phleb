@@ -1,6 +1,32 @@
 -- Enable UUID extension
 create extension if not exists "uuid-ossp";
 
+-- Create labs table for multiple lab partnerships
+create table if not exists public.labs (
+  id uuid default uuid_generate_v4() primary key,
+  name text not null,
+  address text,
+  logo_url text,
+  contact_email text,
+  contact_phone text,
+  is_active boolean default true,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Create test types table
+create table if not exists public.test_types (
+  id uuid default uuid_generate_v4() primary key,
+  lab_id uuid references public.labs(id) on delete cascade not null,
+  name text not null,
+  description text,
+  cash_price numeric(10,2) not null,
+  tube_top_color text,
+  is_active boolean default true,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
 -- Create admin_users table
 create table if not exists public.admin_users (
   id uuid default uuid_generate_v4() primary key,
@@ -122,7 +148,36 @@ create table if not exists public.doctors (
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
+-- Create submissions table
+create table if not exists public.submissions (
+  id uuid default uuid_generate_v4() primary key,
+  patient_name text not null,
+  patient_address text not null,
+  patient_email text,
+  patient_dob date,
+  doctor_name text,
+  doctor_address text,
+  doctor_phone text,
+  doctor_fax text,
+  doctor_email text,
+  lab_id uuid references public.labs(id),
+  test_type_id uuid references public.test_types(id),
+  blood_collection_time time,
+  insurance_company text,
+  insurance_policy_number text,
+  need_fedex_label boolean default false,
+  fedex_ship_from text,
+  stat_test boolean default false,
+  special_instructions text,
+  phlebotomist_name text,
+  phlebotomist_email text,
+  phlebotomist_id uuid references public.phlebotomist_profiles(id),
+  submitted_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
 -- Enable Row Level Security
+alter table public.labs enable row level security;
+alter table public.test_types enable row level security;
 alter table public.profiles enable row level security;
 alter table public.phlebotomist_profiles enable row level security;
 alter table public.working_hours enable row level security;
@@ -130,6 +185,23 @@ alter table public.appointments enable row level security;
 alter table public.chat_threads enable row level security;
 alter table public.chat_messages enable row level security;
 alter table public.reviews enable row level security;
+
+-- Create policies for labs and test types
+create policy "Anyone can view active labs"
+  on public.labs for select
+  using (is_active = true);
+
+create policy "Admins can manage labs"
+  on public.labs for all
+  using (true);
+
+create policy "Anyone can view active test types"
+  on public.test_types for select
+  using (is_active = true);
+
+create policy "Admins can manage test types"
+  on public.test_types for all
+  using (true);
 
 -- Create policies
 create policy "Users can view their own profile"

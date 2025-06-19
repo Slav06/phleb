@@ -22,8 +22,16 @@ import {
   CloseButton,
   useBreakpointValue,
   VStack,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  ModalCloseButton,
+  useDisclosure,
 } from '@chakra-ui/react';
-import { SearchIcon, AttachmentIcon } from '@chakra-ui/icons';
+import { SearchIcon, AttachmentIcon, ChevronDownIcon, ChevronUpIcon } from '@chakra-ui/icons';
 import { supabase } from '../../supabaseClient';
 import { Link as RouterLink } from 'react-router-dom';
 import { FaCloudUploadAlt } from 'react-icons/fa';
@@ -37,9 +45,16 @@ function SubmissionsList() {
   const [dismissedAlerts, setDismissedAlerts] = useState([]);
   const [topLabs, setTopLabs] = useState([]);
   const isMobile = useBreakpointValue({ base: true, md: false });
+  const [labs, setLabs] = useState([]);
+  const { isOpen, onOpen, onClose } = useDisclosure();
+  const [selectedSubmission, setSelectedSubmission] = useState(null);
+  const [selectedLabId, setSelectedLabId] = useState('');
+  const [updatingLab, setUpdatingLab] = useState(false);
+  const [expandedId, setExpandedId] = useState(null);
 
   useEffect(() => {
     fetchSubmissions();
+    fetchLabs();
   }, []);
 
   useEffect(() => {
@@ -77,6 +92,13 @@ function SubmissionsList() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchLabs = async () => {
+    const { data, error } = await supabase
+      .from('labs')
+      .select('id, name');
+    if (!error) setLabs(data || []);
   };
 
   const handleStatusChange = async (id, newStatus) => {
@@ -168,6 +190,11 @@ function SubmissionsList() {
     }
   };
 
+  const getLabName = (lab_id) => {
+    const lab = labs.find(l => l.id === lab_id);
+    return lab ? lab.name : 'Unknown';
+  };
+
   const filteredSubmissions = submissions.filter(submission => {
     const matchesSearch = searchTerm === '' || 
       (submission.patient_name && submission.patient_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
@@ -183,6 +210,57 @@ function SubmissionsList() {
   // Filter out submissions with unknown phlebotomist
   const validSubmissions = submissions.filter(sub => sub.phlebotomist_name && sub.phlebotomist_name !== 'Unknown' && sub.phlebotomist_name.trim() !== '');
 
+  const handleLabChange = (submission) => {
+    setSelectedSubmission(submission);
+    setSelectedLabId(submission.lab_id || '');
+    onOpen();
+  };
+
+  const handleUpdateLab = async () => {
+    if (!selectedSubmission || !selectedLabId) return;
+    
+    setUpdatingLab(true);
+    try {
+      const { error } = await supabase
+        .from('submissions')
+        .update({ lab_id: selectedLabId })
+        .eq('id', selectedSubmission.id);
+
+      if (error) throw error;
+
+      setSubmissions(submissions.map(sub => 
+        sub.id === selectedSubmission.id ? { ...sub, lab_id: selectedLabId } : sub
+      ));
+
+      toast({
+        title: 'Lab updated successfully',
+        status: 'success',
+        duration: 3000,
+        isClosable: true,
+      });
+
+      onClose();
+    } catch (error) {
+      toast({
+        title: 'Error updating lab',
+        description: error.message,
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    } finally {
+      setUpdatingLab(false);
+    }
+  };
+
+  const getFileCount = (submission) => {
+    let count = 0;
+    if (Array.isArray(submission.script_image)) count += submission.script_image.filter(Boolean).length;
+    if (Array.isArray(submission.insurance_card_image)) count += submission.insurance_card_image.filter(Boolean).length;
+    if (Array.isArray(submission.patient_id_image)) count += submission.patient_id_image.filter(Boolean).length;
+    return count;
+  };
+
   if (loading) {
     return <Text>Loading submissions...</Text>;
   }
@@ -193,12 +271,20 @@ function SubmissionsList() {
       {/* Scoreboard for top mobile labs */}
       <Box mb={4} p={3} bg="gray.100" borderRadius="lg" boxShadow="sm" maxW="100%">
         <Heading size="sm" mb={2}>Top Mobile Labs (by Draws Submitted)</Heading>
-        <Box display="flex" flexWrap="wrap" gap={4} alignItems="center">
+        <Box
+          display={{ base: 'flex', md: 'grid' }}
+          flexWrap={{ base: 'nowrap', md: 'wrap' }}
+          overflowX={{ base: 'auto', md: 'visible' }}
+          gridTemplateColumns={{ md: 'repeat(3, 1fr)' }}
+          gap={4}
+          alignItems="center"
+          pb={{ base: 2, md: 0 }}
+        >
           {topLabs.length === 0 ? (
             <Box color="gray.500">No submissions yet.</Box>
           ) : (
             topLabs.map(([name, count], idx) => (
-              <Box key={name} px={4} py={2} bg="white" borderRadius="md" boxShadow="xs" fontWeight="bold" fontSize="lg" border="1px solid #e0e0e0" minW="180px" textAlign="center">
+              <Box key={name} minW={{ base: '220px', md: '180px' }} maxW="240px" px={4} py={2} bg="white" borderRadius="md" boxShadow="xs" fontWeight="bold" fontSize="lg" border="1px solid #e0e0e0" textAlign="center">
                 <Box color="blue.600" fontSize="xl">#{idx + 1}</Box>
                 <Box>{name}</Box>
                 <Box color="green.600" fontSize="2xl">{count}</Box>
@@ -208,251 +294,113 @@ function SubmissionsList() {
           )}
         </Box>
       </Box>
-      {/* Desktop Table */}
-      <Table variant="unstyled" size="sm" width="100%" style={{ tableLayout: 'auto', borderCollapse: 'collapse' }}>
-        <Thead>
-          <Tr bg="blue.700">
-            <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Date</Th>
-            <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Draw ID</Th>
-            <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Patient</Th>
-            <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Patient ID</Th>
-            <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Phlebotomist</Th>
-            <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Status</Th>
-            <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">FedEx</Th>
-            <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Lab Results</Th>
-            <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Insurance Card</Th>
-            <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Patient ID File</Th>
-            <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Deleted</Th>
-            <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Actions</Th>
-          </Tr>
-        </Thead>
-        <Tbody>
-          {filteredSubmissions.map((submission, idx) => (
-            <Tr key={submission.id}
-              bg={idx % 2 === 0 ? 'white' : 'gray.100'}
-              _hover={{ bg: 'blue.50' }}
+      {/* Card List for Submissions */}
+      <VStack spacing={4} align="stretch" w="100%">
+        {filteredSubmissions.map((submission, idx) => {
+          const expanded = expandedId === submission.id;
+          const fileCount = getFileCount(submission);
+          return (
+            <Box
+              key={submission.id}
+              borderWidth={1}
+              borderRadius="lg"
+              boxShadow="sm"
+              bg={expanded ? 'blue.50' : idx % 2 === 0 ? 'white' : 'gray.100'}
+              p={4}
+              transition="background 0.2s"
+              cursor="pointer"
+              onClick={() => setExpandedId(expanded ? null : submission.id)}
+              _hover={{ bg: 'blue.100' }}
+              w="100%"
+              maxW="100vw"
             >
-              <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">{new Date(submission.submitted_at).toLocaleDateString()}</Td>
-              <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">{submission.draw_code || submission.id}</Td>
-              <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">{submission.patient_name || 'N/A'}</Td>
-              <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">
-                {Array.isArray(submission.patient_id_image)
-                  ? submission.patient_id_image.map((url, i) => (
-                      <Button as="a" href={url} download target="_blank" leftIcon={<AttachmentIcon />} size="md" colorScheme="blue" variant="outline" px={2} py={0.5} fontWeight="bold" mr={1} mb={1} key={i}>Download {submission.patient_id_image.length > 1 ? i + 1 : ''}</Button>
-                    ))
-                  : submission.patient_id_image ? (
-                      <Button as="a" href={submission.patient_id_image} download target="_blank" leftIcon={<AttachmentIcon />} size="md" colorScheme="blue" variant="outline" px={2} py={0.5} fontWeight="bold">Download</Button>
-                    ) : (<Text color="gray.400">No file</Text>)}
-              </Td>
-              <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">{submission.phlebotomist_name || 'N/A'}</Td>
-              <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center" bg={
-                submission.status === 'completed'
-                  ? 'green.300'
-                  : submission.status === 'cancelled'
-                  ? 'red.400'
-                  : submission.status === 'in_progress'
-                  ? 'gray.300'
-                  : 'yellow.300'
-              } color={
-                submission.status === 'cancelled' ? 'white' : 'black'
-              }>
-                <Box w="100%" h="100%" display="flex" alignItems="center" justifyContent="center" fontWeight="bold" fontSize="xl">
-                  {submission.status}
-                  {submission.status === 'in_progress' && <Badge colorScheme="gray" ml={2}>Draft</Badge>}
+              {/* Collapsed view: key fields only */}
+              <HStack justify="space-between" align="center" w="100%" spacing={2}>
+                <Box textAlign="center" flex={1} fontWeight="bold">{new Date(submission.submitted_at).toLocaleDateString()}</Box>
+                <Box textAlign="center" flex={1}>{submission.patient_name || 'N/A'}</Box>
+                <Badge textAlign="center" flex={1} colorScheme={submission.status === 'completed' ? 'green' : submission.status === 'cancelled' ? 'red' : 'yellow'} fontSize="lg">{submission.status}</Badge>
+                <Box textAlign="center" flex={1}>{getLabName(submission.lab_id)}</Box>
+                <Badge textAlign="center" flex={1} colorScheme={submission.created_by_user === 'LAB' ? 'blue' : 'green'} fontSize="lg">{submission.created_by_user || 'LAB'}</Badge>
+                <Box flex={1} display="flex" justifyContent="center" alignItems="center">
+                  <Box bg="blue.600" color="white" borderRadius="full" fontSize="2xl" fontWeight="bold" w="48px" h="48px" display="flex" alignItems="center" justifyContent="center">{fileCount}</Box>
                 </Box>
-              </Td>
-              <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">
-                {submission.need_fedex_label ? (
-                  submission.fedex_label_url ? (
-                    <Button
-                      as="a"
-                      href={submission.fedex_label_url}
-                      download target="_blank"
-                      leftIcon={<AttachmentIcon />}
-                      size="md"
-                      colorScheme="blue"
-                      variant="outline"
-                      px={2}
-                      py={0.5}
+                <Button size="sm" variant="ghost" onClick={e => { e.stopPropagation(); setExpandedId(expanded ? null : submission.id); }}>
+                  {expanded ? <ChevronUpIcon /> : <ChevronDownIcon />}
+                </Button>
+              </HStack>
+              {/* Expanded view: all details and actions */}
+              {expanded && (
+                <Box mt={4}>
+                  <Text><b>Draw ID:</b> {submission.draw_code || submission.id}</Text>
+                  <Text><b>Phlebotomist:</b> {submission.phlebotomist_name || 'N/A'}</Text>
+                  <Text><b>Doctor:</b> {submission.doctor_name || 'N/A'}</Text>
+                  <Text><b>Insurance Company:</b> {submission.insurance_company || 'N/A'}</Text>
+                  <Text><b>Special Instructions:</b> {submission.special_instructions || 'N/A'}</Text>
+                  <Text><b>FedEx:</b> {submission.need_fedex_label ? (submission.fedex_label_url ? <Button as="a" href={submission.fedex_label_url} download target="_blank" size="sm" colorScheme="blue">View</Button> : 'Waiting for label') : 'No'}</Text>
+                  <Text><b>Lab Results:</b> {submission.lab_results_url ? <Button as="a" href={submission.lab_results_url} download target="_blank" size="sm" colorScheme="green">Download</Button> : 'Not uploaded'}</Text>
+                  <Text><b>Insurance Card:</b> {Array.isArray(submission.insurance_card_image) && submission.insurance_card_image.length > 0 && submission.insurance_card_image[0] ? <Button as="a" href={submission.insurance_card_image[0]} download target="_blank" size="sm" colorScheme="blue">View</Button> : 'No file'}</Text>
+                  <Text><b>Patient ID:</b> {Array.isArray(submission.patient_id_image) && submission.patient_id_image.length > 0 && submission.patient_id_image[0] ? <Button as="a" href={submission.patient_id_image[0]} download target="_blank" size="sm" colorScheme="blue">View</Button> : 'No file'}</Text>
+                  <Text><b>Deleted:</b> {submission.deleted_by_lab ? <Badge colorScheme="red">DELETED BY LAB</Badge> : ''}</Text>
+                  <Box mt={2} display="flex" gap={2} flexWrap="wrap">
+                    <Button as={RouterLink} to={`/admin/submissions/${submission.id}`} colorScheme="blue" size="sm">Edit/View</Button>
+                    <Button size="sm" colorScheme="blue" variant="outline" onClick={e => { e.stopPropagation(); handleLabChange(submission); }}>Change Lab</Button>
+                    <Select
+                      value={submission.status}
+                      onChange={e => { e.stopPropagation(); handleStatusChange(submission.id, e.target.value); }}
+                      size="sm"
+                      maxW="120px"
                       fontWeight="bold"
+                      minW="100px"
                     >
-                      View
-                    </Button>
-                  ) : (
-                    <>
-                      <Input
-                        type="file"
-                        accept="application/pdf,image/*"
-                        size="md"
-                        py={0.5}
-                        fontWeight="bold"
-                        onChange={e => handleFedexLabelUpload(submission.id, e.target.files[0])}
-                      />
-                      <Box mt={2} p={3} bg="yellow.100" color="orange.800" fontWeight="bold" borderRadius="md" fontSize="lg" textAlign="center">
-                        Waiting for FedEx label upload!
-                      </Box>
-                    </>
-                  )
-                ) : null}
-              </Td>
-              <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">
-                {submission.lab_results_url ? (
-                  <Button
-                    as="a"
-                    href={submission.lab_results_url}
-                    download target="_blank"
-                    leftIcon={<AttachmentIcon />}
-                    size="md"
-                    colorScheme="green"
-                    variant="outline"
-                    px={2}
-                    py={0.5}
-                    fontWeight="bold"
-                  >
-                    Download
-                  </Button>
-                ) : (
-                  <Input
-                    type="file"
-                    accept="application/pdf,image/*"
-                    size="md"
-                    py={0.5}
-                    fontWeight="bold"
-                    onChange={e => handleLabResultsUpload(submission.id, e.target.files[0])}
-                  />
-                )}
-              </Td>
-              <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">
-                {Array.isArray(submission.insurance_card_image)
-                  ? submission.insurance_card_image.map((url, i) => (
-                      <Button as="a" href={url} download target="_blank" leftIcon={<AttachmentIcon />} size="md" colorScheme="blue" variant="outline" px={2} py={0.5} fontWeight="bold" mr={1} mb={1} key={i}>View {submission.insurance_card_image.length > 1 ? i + 1 : ''}</Button>
-                    ))
-                  : submission.insurance_card_image ? (
-                      <Button as="a" href={submission.insurance_card_image} download target="_blank" leftIcon={<AttachmentIcon />} size="md" colorScheme="blue" variant="outline" px={2} py={0.5} fontWeight="bold">View</Button>
-                    ) : (<Text color="gray.400">No file</Text>)}
-              </Td>
-              <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">
-                {Array.isArray(submission.script_image)
-                  ? submission.script_image.map((url, i) => (
-                      <Button as="a" href={url} download target="_blank" leftIcon={<AttachmentIcon />} size="md" colorScheme="purple" variant="outline" px={2} py={0.5} fontWeight="bold" mr={1} mb={1} key={i}>View Script {submission.script_image.length > 1 ? i + 1 : ''}</Button>
-                    ))
-                  : submission.script_image ? (
-                      <Button as="a" href={submission.script_image} download target="_blank" leftIcon={<AttachmentIcon />} size="md" colorScheme="purple" variant="outline" px={2} py={0.5} fontWeight="bold">View Script</Button>
-                    ) : (<Text color="gray.400">No file</Text>)}
-              </Td>
-              <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center" bg={submission.deleted_by_lab ? 'red.400' : idx % 2 === 0 ? 'white' : 'gray.100'} color={submission.deleted_by_lab ? 'white' : 'black'}>
-                <Box w="100%" h="100%" display="flex" alignItems="center" justifyContent="center" fontWeight="bold" fontSize="xl">
-                  {submission.deleted_by_lab ? 'DELETED BY LAB' : ''}
+                      <option value="pending">Pending</option>
+                      <option value="completed">Completed</option>
+                      <option value="cancelled">Cancelled</option>
+                    </Select>
+                  </Box>
                 </Box>
-              </Td>
-              <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center" bg={idx % 2 === 0 ? 'white' : 'gray.100'}>
-                <Box display="flex" alignItems="center" justifyContent="center" gap={2} w="100%">
-                  <Select
-                    value={submission.status}
-                    onChange={(e) => handleStatusChange(submission.id, e.target.value)}
-                    size="md"
-                    maxW="120px"
-                    py={0.5}
-                    fontWeight="bold"
-                    flex={1}
-                    minW="100px"
-                  >
-                    <option value="pending">Pending</option>
-                    <option value="completed">Completed</option>
-                    <option value="cancelled">Cancelled</option>
-                  </Select>
-                  <Button
-                    as={RouterLink}
-                    to={`/admin/submissions/${submission.id}`}
-                    colorScheme="blue"
-                    size="md"
-                    px={2}
-                    py={0.5}
-                    fontWeight="bold"
-                    flex={1}
-                    minW="100px"
-                  >
-                    Edit/View
-                  </Button>
-                </Box>
-              </Td>
-            </Tr>
-          ))}
-        </Tbody>
-      </Table>
-      {/* Mobile Cards */}
-      <Box display={{ base: 'block', md: 'none' }}>
-        <VStack spacing={4} align="stretch">
-          {filteredSubmissions.map((submission, idx) => (
-            <Box key={submission.id} p={4} borderWidth={1} borderRadius="lg" boxShadow="sm" bg={idx % 2 === 0 ? 'white' : 'gray.100'}>
-              <Box fontWeight="bold" fontSize="lg">Draw #{submission.id} - {new Date(submission.submitted_at).toLocaleDateString()}</Box>
-              <Box>Patient: <b>{submission.patient_name || 'N/A'}</b></Box>
-              <Box>Patient ID: <b>{Array.isArray(submission.patient_id_image) ? 'Multiple files' : submission.patient_id_image ? 'View' : 'No file'}</b></Box>
-              <Box>Phlebotomist: <b>{submission.phlebotomist_name || 'N/A'}</b></Box>
-              <Box>Status: <b>{submission.status}</b></Box>
-              <Box mt={2} mb={2}>
-                <InputGroup size="md">
-                  <Input
-                    type="file"
-                    accept="application/pdf,image/*"
-                    display="none"
-                    id={`fedex-upload-${submission.id}`}
-                    onChange={e => handleFedexLabelUpload(submission.id, e.target.files[0])}
-                  />
-                  <label htmlFor={`fedex-upload-${submission.id}`} style={{ width: '100%' }}>
-                    <Box as="span" display="flex" alignItems="center" borderWidth={2} borderStyle="dashed" borderRadius="lg" p={2} cursor="pointer" _hover={{ borderColor: 'blue.400' }}>
-                      <FaCloudUploadAlt style={{ marginRight: 8 }} />
-                      {submission.fedex_label_url ? (
-                        <Button as="a" href={submission.fedex_label_url} download target="_blank" size="sm" colorScheme="blue" ml={2}>View FedEx</Button>
-                      ) : (
-                        <Box color="gray.500">Upload FedEx Label</Box>
-                      )}
-                    </Box>
-                  </label>
-                </InputGroup>
-              </Box>
-              <Box mb={2}>
-                <InputGroup size="md">
-                  <Input
-                    type="file"
-                    accept="application/pdf,image/*"
-                    display="none"
-                    id={`labresults-upload-${submission.id}`}
-                    onChange={e => handleLabResultsUpload(submission.id, e.target.files[0])}
-                  />
-                  <label htmlFor={`labresults-upload-${submission.id}`} style={{ width: '100%' }}>
-                    <Box as="span" display="flex" alignItems="center" borderWidth={2} borderStyle="dashed" borderRadius="lg" p={2} cursor="pointer" _hover={{ borderColor: 'green.400' }}>
-                      <FaCloudUploadAlt style={{ marginRight: 8 }} />
-                      {submission.lab_results_url ? (
-                        <Button as="a" href={submission.lab_results_url} download target="_blank" size="sm" colorScheme="green" ml={2}>View Results</Button>
-                      ) : (
-                        <Box color="gray.500">Upload Lab Results</Box>
-                      )}
-                    </Box>
-                  </label>
-                </InputGroup>
-              </Box>
-              <Box display="flex" alignItems="center" gap={2} mt={2}>
-                <Select
-                  value={submission.status}
-                  onChange={(e) => handleStatusChange(submission.id, e.target.value)}
-                  size="md"
-                  maxW="120px"
-                  fontWeight="bold"
-                >
-                  <option value="pending">Pending</option>
-                  <option value="completed">Completed</option>
-                  <option value="cancelled">Cancelled</option>
-                </Select>
-                <Button as={RouterLink} to={`/admin/submissions/${submission.id}`} colorScheme="blue" size="md" fontWeight="bold">Edit/View</Button>
-              </Box>
-              {submission.deleted_by_lab && (
-                <Box mt={2} color="white" bg="red.400" borderRadius="md" px={2} py={1} fontWeight="bold" textAlign="center">DELETED BY LAB</Box>
               )}
             </Box>
-          ))}
-        </VStack>
-      </Box>
+          );
+        })}
+      </VStack>
+
+      {/* Lab Change Modal */}
+      <Modal isOpen={isOpen} onClose={onClose}>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Change Lab for Submission</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <Text mb={4}>
+              Change the lab for submission: <strong>{selectedSubmission?.patient_name || 'Unknown'}</strong>
+            </Text>
+            <Select
+              value={selectedLabId}
+              onChange={(e) => setSelectedLabId(e.target.value)}
+              placeholder="Select a lab"
+            >
+              {labs.map((lab) => (
+                <option key={lab.id} value={lab.id}>
+                  {lab.name}
+                </option>
+              ))}
+            </Select>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="ghost" mr={3} onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              colorScheme="blue"
+              onClick={handleUpdateLab}
+              isLoading={updatingLab}
+              isDisabled={!selectedLabId}
+            >
+              Update Lab
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </Box>
   );
 }

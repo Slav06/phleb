@@ -58,7 +58,7 @@ function Navigation({ userType = 'patient', labId }) {
         <HStack spacing={8} alignItems={'center'}>
           <Box>
             <ChakraLink as={RouterLink} to="/" fontWeight="bold" fontSize="lg">
-              Phlebotomy App
+              <img src="/logo.png" alt="At Home Blood Draw Logo" style={{ height: 40, width: 'auto', display: 'block' }} />
             </ChakraLink>
           </Box>
           <HStack as={'nav'} spacing={4} display={{ base: 'none', md: 'flex' }}>
