@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Box,
   Table,
@@ -30,17 +30,76 @@ import {
   ModalFooter,
   ModalCloseButton,
   useDisclosure,
+  Grid,
+  GridItem,
+  FormControl,
+  FormLabel,
+  SimpleGrid,
+  IconButton,
+  Wrap,
+  WrapItem,
 } from '@chakra-ui/react';
 import { SearchIcon, AttachmentIcon, ChevronDownIcon, ChevronUpIcon } from '@chakra-ui/icons';
 import { supabase } from '../../supabaseClient';
 import { Link as RouterLink } from 'react-router-dom';
 import { FaCloudUploadAlt } from 'react-icons/fa';
 
+function isImageFile(url) {
+  return url && /\.(jpe?g|png|gif|bmp|webp|svg)$/i.test(url);
+}
+
+const PdfIcon = () => (
+  <span
+    style={{
+      display: 'inline-block',
+      width: 60,
+      height: 60,
+      background: '#f5f5f5',
+      borderRadius: 6,
+      border: '1px solid #ccc',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontSize: 32,
+      color: '#e53e3e'
+    }}
+  >
+    📄
+  </span>
+);
+
+function PreviewModal({ isOpen, onClose, fileUrl }) {
+  const isImage = isImageFile(fileUrl);
+  const isPdf = fileUrl && fileUrl.endsWith('.pdf');
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} size="4xl" isCentered>
+      <ModalOverlay />
+      <ModalContent>
+        <ModalCloseButton />
+        <ModalBody display="flex" alignItems="center" justifyContent="center" p={0}>
+          {isImage && (
+            <img src={fileUrl} alt="Preview" style={{ maxWidth: '90vw', maxHeight: '80vh', objectFit: 'contain' }} />
+          )}
+          {isPdf && (
+            <iframe src={fileUrl} title="PDF Preview" style={{ width: '90vw', height: '80vh', border: 'none' }} />
+          )}
+        </ModalBody>
+      </ModalContent>
+    </Modal>
+  );
+}
+
 function SubmissionsList() {
   const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilters, setStatusFilters] = useState({
+    pending: true,
+    waiting_to_be_received: true,
+    completed: true,
+    cancelled: true,
+    in_progress: true
+  });
   const toast = useToast();
   const [dismissedAlerts, setDismissedAlerts] = useState([]);
   const [topLabs, setTopLabs] = useState([]);
@@ -51,6 +110,12 @@ function SubmissionsList() {
   const [selectedLabId, setSelectedLabId] = useState('');
   const [updatingLab, setUpdatingLab] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
+  
+  const [editingForm, setEditingForm] = useState({});
+  const [saving, setSaving] = useState(false);
+
+  const [previewUrl, setPreviewUrl] = useState(null);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
   useEffect(() => {
     fetchSubmissions();
@@ -58,9 +123,7 @@ function SubmissionsList() {
   }, []);
 
   useEffect(() => {
-    // Filter out submissions with unknown phlebotomist
     const validSubmissions = submissions.filter(sub => sub.phlebotomist_name && sub.phlebotomist_name !== 'Unknown' && sub.phlebotomist_name.trim() !== '');
-    // Calculate top labs by submission count
     const labCounts = {};
     validSubmissions.forEach(sub => {
       const name = sub.phlebotomist_name;
@@ -135,16 +198,13 @@ function SubmissionsList() {
     if (!file) return;
     const fileExt = file.name.split('.').pop();
     const filePath = `fedex-labels/${submissionId}.${fileExt}`;
-    // Upload to Supabase Storage
     const { error: uploadError } = await supabase.storage.from('fedex-labels').upload(filePath, file, { upsert: true });
     if (uploadError) {
       toast({ title: 'Upload failed', description: uploadError.message, status: 'error', duration: 5000, isClosable: true });
       return;
     }
-    // Get public URL
     const { data: urlData } = supabase.storage.from('fedex-labels').getPublicUrl(filePath);
     const labelUrl = urlData.publicUrl;
-    // Update submission record
     const { error: updateError } = await supabase.from('submissions').update({ fedex_label_url: labelUrl }).eq('id', submissionId);
     if (updateError) {
       toast({ title: 'Error saving label URL', description: updateError.message, status: 'error', duration: 5000, isClosable: true });
@@ -158,16 +218,13 @@ function SubmissionsList() {
     if (!file) return;
     const fileExt = file.name.split('.').pop();
     const filePath = `lab-results/${submissionId}.${fileExt}`;
-    // Upload to Supabase Storage
     const { error: uploadError } = await supabase.storage.from('lab-results').upload(filePath, file, { upsert: true });
     if (uploadError) {
       toast({ title: 'Upload failed', description: uploadError.message, status: 'error', duration: 5000, isClosable: true });
       return;
     }
-    // Get public URL
     const { data: urlData } = supabase.storage.from('lab-results').getPublicUrl(filePath);
     const resultsUrl = urlData.publicUrl;
-    // Update submission record
     const { error: updateError } = await supabase.from('submissions').update({ lab_results_url: resultsUrl }).eq('id', submissionId);
     if (updateError) {
       toast({ title: 'Error saving lab results URL', description: updateError.message, status: 'error', duration: 5000, isClosable: true });
@@ -178,13 +235,17 @@ function SubmissionsList() {
   };
 
   const getStatusColor = (status) => {
-    switch (status) {
+    switch (status?.toLowerCase()) {
       case 'pending':
         return 'yellow';
+      case 'waiting_to_be_received':
+        return 'purple';
       case 'completed':
         return 'green';
       case 'cancelled':
         return 'red';
+      case 'in_progress':
+        return 'blue';
       default:
         return 'gray';
     }
@@ -195,19 +256,27 @@ function SubmissionsList() {
     return lab ? lab.name : 'Unknown';
   };
 
-  const filteredSubmissions = submissions.filter(submission => {
-    const matchesSearch = searchTerm === '' || 
-      (submission.patient_name && submission.patient_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (submission.phlebotomist_name && submission.phlebotomist_name.toLowerCase().includes(searchTerm.toLowerCase()));
-    
-    const matchesStatus = statusFilter === 'all' || submission.status === statusFilter;
-    
-    return matchesSearch && matchesStatus;
-  });
+  const filteredSubmissions = useMemo(() => {
+    return submissions.filter(submission => {
+      if (!statusFilters[submission.status?.toLowerCase() || 'pending']) {
+        return false;
+      }
+      
+      if (searchQuery) {
+        const searchLower = searchQuery.toLowerCase();
+        return (
+          submission.patient_name?.toLowerCase().includes(searchLower) ||
+          submission.doctor_name?.toLowerCase().includes(searchLower) ||
+          submission.status?.toLowerCase().includes(searchLower)
+        );
+      }
+      
+      return true;
+    });
+  }, [submissions, searchQuery, statusFilters]);
 
   const waitingForFedex = submissions.filter(sub => sub.need_fedex_label && !sub.fedex_label_url);
 
-  // Filter out submissions with unknown phlebotomist
   const validSubmissions = submissions.filter(sub => sub.phlebotomist_name && sub.phlebotomist_name !== 'Unknown' && sub.phlebotomist_name.trim() !== '');
 
   const handleLabChange = (submission) => {
@@ -261,110 +330,462 @@ function SubmissionsList() {
     return count;
   };
 
+  const handleChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setEditingForm(f => ({ ...f, [name]: type === 'checkbox' ? checked : value }));
+  };
+
+  const handleFileUpload = async (field, file) => {
+    if (!file || !selectedSubmission) return;
+    const fileExt = file.name.split('.').pop();
+    const filePath = `${field}/${selectedSubmission.id}.${fileExt}`;
+    const { error: uploadError } = await supabase.storage.from(field).upload(filePath, file, { upsert: true });
+    if (uploadError) {
+      toast({ title: 'Upload failed', description: uploadError.message, status: 'error' });
+      return;
+    }
+    const { data: urlData } = supabase.storage.from(field).getPublicUrl(filePath);
+    let column = '';
+    if (field === 'lab-results') column = 'lab_results_url';
+    else if (field === 'fedex-labels') column = 'fedex_label_url';
+    else column = `${field}_url`;
+    setEditingForm(f => ({ ...f, [column]: urlData.publicUrl }));
+    toast({ title: 'File uploaded', status: 'success' });
+  };
+
+  const handleSave = async () => {
+    if (!selectedSubmission) return;
+    setSaving(true);
+    const { error } = await supabase.from('submissions').update(editingForm).eq('id', selectedSubmission.id);
+    setSaving(false);
+    if (error) {
+      toast({ title: 'Error saving', description: error.message, status: 'error' });
+    } else {
+      toast({ title: 'Saved successfully', status: 'success' });
+      setSubmissions(submissions.map(sub => 
+        sub.id === selectedSubmission.id ? { ...sub, ...editingForm } : sub
+      ));
+      setSelectedSubmission({ ...selectedSubmission, ...editingForm });
+    }
+  };
+
+  useEffect(() => {
+    if (selectedSubmission) {
+      setEditingForm(selectedSubmission);
+    }
+  }, [selectedSubmission]);
+
+  const toggleStatusFilter = (status) => {
+    setStatusFilters(prev => ({
+      ...prev,
+      [status]: !prev[status]
+    }));
+  };
+
+  const openPreview = (url) => { setPreviewUrl(url); setIsPreviewOpen(true); };
+  const closePreview = () => { setIsPreviewOpen(false); setPreviewUrl(null); };
+
+  const SubmissionDetails = ({ submission }) => {
+    if (!submission) return <Box p={8} textAlign="center">Select a submission to view details</Box>;
+
+    return (
+      <Box p={3} bg="white" borderRadius="lg" boxShadow="sm">
+        <HStack justify="space-between" mb={2}>
+          <Heading size="md">Edit Submission</Heading>
+          <Button colorScheme="blue" size="sm" onClick={handleSave} isLoading={saving}>
+            Save Changes
+          </Button>
+        </HStack>
+        {editingForm.status === 'waiting_to_be_received' && (
+          <Button colorScheme="green" mb={4} onClick={async () => {
+            const { error } = await supabase.from('submissions').update({ status: 'waiting_on_lab_results' }).eq('id', submission.id);
+            if (!error) {
+              setEditingForm(f => ({ ...f, status: 'waiting_on_lab_results' }));
+              toast({ title: 'Marked as received', status: 'success', duration: 2000, isClosable: true });
+            } else {
+              toast({ title: 'Error', description: error.message, status: 'error', duration: 4000, isClosable: true });
+            }
+          }}>
+            Mark as Received
+          </Button>
+        )}
+        <Grid templateColumns={{ base: "1fr", lg: "repeat(2, 1fr)" }} gap={3}>
+          <VStack spacing={3} align="stretch">
+            <Box>
+              <Heading size="sm" mb={1} color="blue.600">Patient Information</Heading>
+              <SimpleGrid columns={{ base: 1, xl: 2 }} spacing={1}>
+                <FormControl>
+                  <FormLabel fontSize="sm" mb={0.5}>Patient Name</FormLabel>
+                  <Input name="patient_name" value={editingForm.patient_name || ''} onChange={handleChange} size="sm" maxW="250px" />
+                </FormControl>
+                <FormControl>
+                  <FormLabel fontSize="sm" mb={0.5}>Patient Email</FormLabel>
+                  <Input name="patient_email" value={editingForm.patient_email || ''} onChange={handleChange} size="sm" maxW="250px" />
+                </FormControl>
+                <FormControl>
+                  <FormLabel fontSize="sm" mb={0.5}>Patient Address</FormLabel>
+                  <Input name="patient_address" value={editingForm.patient_address || ''} onChange={handleChange} size="sm" maxW="250px" />
+                </FormControl>
+                <FormControl>
+                  <FormLabel fontSize="sm" mb={0.5}>Patient DOB</FormLabel>
+                  <Input name="patient_dob" value={editingForm.patient_dob || ''} onChange={handleChange} size="sm" maxW="150px" />
+                </FormControl>
+              </SimpleGrid>
+            </Box>
+            <Box>
+              <Heading size="sm" mb={1} color="green.600">Doctor Information</Heading>
+              <SimpleGrid columns={{ base: 1, xl: 2 }} spacing={1}>
+                <FormControl>
+                  <FormLabel fontSize="sm" mb={0.5}>Doctor Name</FormLabel>
+                  <Input name="doctor_name" value={editingForm.doctor_name || ''} onChange={handleChange} size="sm" maxW="250px" />
+                </FormControl>
+                <FormControl>
+                  <FormLabel fontSize="sm" mb={0.5}>Doctor Email</FormLabel>
+                  <Input name="doctor_email" value={editingForm.doctor_email || ''} onChange={handleChange} size="sm" maxW="250px" />
+                </FormControl>
+                <FormControl>
+                  <FormLabel fontSize="sm" mb={0.5}>Doctor Phone</FormLabel>
+                  <Input name="doctor_phone" value={editingForm.doctor_phone || ''} onChange={handleChange} size="sm" maxW="150px" />
+                </FormControl>
+                <FormControl>
+                  <FormLabel fontSize="sm" mb={0.5}>Doctor Fax</FormLabel>
+                  <Input name="doctor_fax" value={editingForm.doctor_fax || ''} onChange={handleChange} size="sm" maxW="150px" />
+                </FormControl>
+                <FormControl>
+                  <FormLabel fontSize="sm" mb={0.5}>Doctor Address</FormLabel>
+                  <Input name="doctor_address" value={editingForm.doctor_address || ''} onChange={handleChange} size="sm" maxW="250px" />
+                </FormControl>
+              </SimpleGrid>
+            </Box>
+            <Box>
+              <Heading size="sm" mb={1} color="purple.600">Test Information</Heading>
+              <SimpleGrid columns={{ base: 1, xl: 2 }} spacing={1}>
+                <FormControl>
+                  <FormLabel fontSize="sm" mb={0.5}>Lab Brand</FormLabel>
+                  <Input name="lab_brand" value={editingForm.lab_brand || ''} onChange={handleChange} size="sm" maxW="250px" />
+                </FormControl>
+                <FormControl>
+                  <FormLabel fontSize="sm" mb={0.5}>Blood Collection Time</FormLabel>
+                  <Input name="blood_collection_time" value={editingForm.blood_collection_time || ''} onChange={handleChange} size="sm" maxW="150px" />
+                </FormControl>
+                <FormControl>
+                  <FormLabel fontSize="sm" mb={0.5}>Special Instructions</FormLabel>
+                  <Box p={2} bg="gray.50" borderRadius="md" fontSize="sm" minH="32px">
+                    {editingForm.special_instructions || <Text color="gray.400">No special instructions</Text>}
+                  </Box>
+                </FormControl>
+              </SimpleGrid>
+            </Box>
+          </VStack>
+          <VStack spacing={3} align="stretch">
+            <Box>
+              <Heading size="sm" mb={1} color="orange.600">Insurance Information</Heading>
+              <SimpleGrid columns={{ base: 1, xl: 2 }} spacing={1}>
+                <FormControl>
+                  <FormLabel fontSize="sm" mb={0.5}>Insurance Company</FormLabel>
+                  <Input name="insurance_company" value={editingForm.insurance_company || ''} onChange={handleChange} size="sm" maxW="250px" />
+                </FormControl>
+                <FormControl>
+                  <FormLabel fontSize="sm" mb={0.5}>Insurance Policy Number</FormLabel>
+                  <Input name="insurance_policy_number" value={editingForm.insurance_policy_number || ''} onChange={handleChange} size="sm" maxW="150px" />
+                </FormControl>
+              </SimpleGrid>
+            </Box>
+            <Box>
+              <Heading size="sm" mb={1} color="red.600">Status & Actions</Heading>
+              <SimpleGrid columns={{ base: 1, xl: 2 }} spacing={1}>
+                <FormControl>
+                  <FormLabel fontSize="sm" mb={0.5}>Status</FormLabel>
+                  <Select name="status" value={editingForm.status || ''} onChange={handleChange} size="sm" maxW="150px">
+                    <option value="pending">Pending</option>
+                    <option value="completed">Completed</option>
+                    <option value="cancelled">Cancelled</option>
+                    <option value="in_progress">In Progress</option>
+                  </Select>
+                </FormControl>
+                <HStack spacing={2} alignItems="flex-end">
+                  <Button size="sm" colorScheme="blue" variant="outline" onClick={() => handleLabChange(submission)}>
+                    Change Lab
+                  </Button>
+                  <Text fontSize="sm" color="gray.600">
+                    Lab: {getLabName(submission.lab_id)}
+                  </Text>
+                </HStack>
+              </SimpleGrid>
+            </Box>
+            <Box>
+              <Heading size="sm" mb={1} color="teal.600">Files & Documents</Heading>
+              <SimpleGrid columns={{ base: 1, xl: 2 }} spacing={1}>
+                <FormControl>
+                  <FormLabel fontSize="sm" mb={0.5}>FedEx Label</FormLabel>
+                  <HStack spacing={2} flexWrap="wrap">
+                    {editingForm.fedex_label_url && (
+                      <Box textAlign="center">
+                        <a href={editingForm.fedex_label_url} target="_blank" rel="noopener noreferrer">
+                          {isImageFile(editingForm.fedex_label_url) ? (
+                            <img src={editingForm.fedex_label_url} alt="FedEx Label" style={{ width: 300, height: 300, objectFit: 'cover', borderRadius: 6, marginBottom: 2, border: '1px solid #ccc' }} />
+                          ) : editingForm.fedex_label_url && typeof editingForm.fedex_label_url === 'string' && editingForm.fedex_label_url.endsWith('.pdf') ? (
+                            <PdfIcon />
+                          ) : null}
+                        </a>
+                        <Button as="a" href={editingForm.fedex_label_url} target="_blank" colorScheme="blue" size="sm" leftIcon={<AttachmentIcon />}>View</Button>
+                      </Box>
+                    )}
+                    <Input type="file" accept="application/pdf,image/*" onChange={e => handleFileUpload('fedex-labels', e.target.files[0])} size="sm" maxW="250px" />
+                  </HStack>
+                </FormControl>
+                <FormControl>
+                  <FormLabel fontSize="sm" mb={0.5}>Lab Results</FormLabel>
+                  <HStack spacing={2} flexWrap="wrap">
+                    {editingForm.lab_results_url && (
+                      <Box textAlign="center">
+                        <a href={editingForm.lab_results_url} target="_blank" rel="noopener noreferrer">
+                          {isImageFile(editingForm.lab_results_url) ? (
+                            <img src={editingForm.lab_results_url} alt="Lab Results" style={{ width: 300, height: 300, objectFit: 'cover', borderRadius: 6, marginBottom: 2, border: '1px solid #ccc' }} />
+                          ) : editingForm.lab_results_url && typeof editingForm.lab_results_url === 'string' && editingForm.lab_results_url.endsWith('.pdf') ? (
+                            <PdfIcon />
+                          ) : null}
+                        </a>
+                        <Button as="a" href={editingForm.lab_results_url} target="_blank" colorScheme="green" size="sm" leftIcon={<AttachmentIcon />}>View</Button>
+                      </Box>
+                    )}
+                    <Input type="file" accept="application/pdf,image/*" onChange={e => handleFileUpload('lab-results', e.target.files[0])} size="sm" maxW="250px" />
+                  </HStack>
+                </FormControl>
+                <FormControl>
+                  <FormLabel fontSize="sm" mb={0.5}>Doctor's Script</FormLabel>
+                  <HStack spacing={2} flexWrap="wrap">
+                    {Array.isArray(editingForm.script_image)
+                      ? editingForm.script_image.map((url, idx) => (
+                          <Box key={idx} textAlign="center">
+                            <Box as="span" style={{ cursor: 'pointer', display: 'inline-block' }} onClick={() => openPreview(url)}>
+                              {isImageFile(url) ? (
+                                <img src={url} alt={`Script ${idx + 1}`} style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 6, marginBottom: 2, border: '1px solid #ccc' }} />
+                              ) : url && typeof url === 'string' && url.endsWith('.pdf') ? (
+                                <PdfIcon />
+                              ) : null}
+                            </Box>
+                            <Button as="a" href={url} target="_blank" colorScheme="blue" size="sm" leftIcon={<AttachmentIcon />}>View {idx + 1}</Button>
+                          </Box>
+                        ))
+                      : editingForm.script_image && (
+                          <Box textAlign="center">
+                            <Box as="span" style={{ cursor: 'pointer', display: 'inline-block' }} onClick={() => openPreview(editingForm.script_image)}>
+                              {isImageFile(editingForm.script_image) ? (
+                                <img src={editingForm.script_image} alt="Script" style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 6, marginBottom: 2, border: '1px solid #ccc' }} />
+                              ) : editingForm.script_image && typeof editingForm.script_image === 'string' && editingForm.script_image.endsWith('.pdf') ? (
+                                <PdfIcon />
+                              ) : null}
+                            </Box>
+                            <Button as="a" href={editingForm.script_image} target="_blank" colorScheme="blue" size="sm" leftIcon={<AttachmentIcon />}>View</Button>
+                          </Box>
+                        )}
+                  </HStack>
+                </FormControl>
+                <FormControl>
+                  <FormLabel fontSize="sm" mb={0.5}>Insurance Card</FormLabel>
+                  <HStack spacing={2} flexWrap="wrap">
+                    {Array.isArray(editingForm.insurance_card_image)
+                      ? editingForm.insurance_card_image.map((url, idx) => (
+                          <Box key={idx} textAlign="center">
+                            <a href={url} target="_blank" rel="noopener noreferrer">
+                              {isImageFile(url) ? (
+                                <img src={url} alt={`Insurance Card ${idx + 1}`} style={{ width: 300, height: 300, objectFit: 'cover', borderRadius: 6, marginBottom: 2, border: '1px solid #ccc' }} />
+                              ) : url && typeof url === 'string' && url.endsWith('.pdf') ? (
+                                <PdfIcon />
+                              ) : null}
+                            </a>
+                            <Button as="a" href={url} target="_blank" colorScheme="purple" size="sm" leftIcon={<AttachmentIcon />}>
+                              View {idx + 1}
+                            </Button>
+                          </Box>
+                        ))
+                      : editingForm.insurance_card_image && (
+                          <Box textAlign="center">
+                            <a href={editingForm.insurance_card_image} target="_blank" rel="noopener noreferrer">
+                              {isImageFile(editingForm.insurance_card_image) ? (
+                                <img src={editingForm.insurance_card_image} alt="Insurance Card" style={{ width: 300, height: 300, objectFit: 'cover', borderRadius: 6, marginBottom: 2, border: '1px solid #ccc' }} />
+                              ) : editingForm.insurance_card_image && typeof editingForm.insurance_card_image === 'string' && editingForm.insurance_card_image.endsWith('.pdf') ? (
+                                <PdfIcon />
+                              ) : null}
+                            </a>
+                            <Button as="a" href={editingForm.insurance_card_image} target="_blank" colorScheme="purple" size="sm" leftIcon={<AttachmentIcon />}>
+                              View
+                            </Button>
+                          </Box>
+                        )}
+                  </HStack>
+                </FormControl>
+                <FormControl>
+                  <FormLabel fontSize="sm" mb={0.5}>Patient ID</FormLabel>
+                  <HStack spacing={2} flexWrap="wrap">
+                    {Array.isArray(editingForm.patient_id_image)
+                      ? editingForm.patient_id_image.map((url, idx) => (
+                          <Box key={idx} textAlign="center">
+                            <a href={url} target="_blank" rel="noopener noreferrer">
+                              {isImageFile(url) ? (
+                                <img src={url} alt={`Patient ID ${idx + 1}`} style={{ width: 300, height: 300, objectFit: 'cover', borderRadius: 6, marginBottom: 2, border: '1px solid #ccc' }} />
+                              ) : url && typeof url === 'string' && url.endsWith('.pdf') ? (
+                                <PdfIcon />
+                              ) : null}
+                            </a>
+                            <Button as="a" href={url} target="_blank" colorScheme="orange" size="sm" leftIcon={<AttachmentIcon />}>
+                              View {idx + 1}
+                            </Button>
+                          </Box>
+                        ))
+                      : editingForm.patient_id_image && (
+                          <Box textAlign="center">
+                            <a href={editingForm.patient_id_image} target="_blank" rel="noopener noreferrer">
+                              {isImageFile(editingForm.patient_id_image) ? (
+                                <img src={editingForm.patient_id_image} alt="Patient ID" style={{ width: 300, height: 300, objectFit: 'cover', borderRadius: 6, marginBottom: 2, border: '1px solid #ccc' }} />
+                              ) : editingForm.patient_id_image && typeof editingForm.patient_id_image === 'string' && editingForm.patient_id_image.endsWith('.pdf') ? (
+                                <PdfIcon />
+                              ) : null}
+                            </a>
+                            <Button as="a" href={editingForm.patient_id_image} target="_blank" colorScheme="orange" size="sm" leftIcon={<AttachmentIcon />}>
+                              View
+                            </Button>
+                          </Box>
+                        )}
+                  </HStack>
+                </FormControl>
+              </SimpleGrid>
+            </Box>
+          </VStack>
+        </Grid>
+        <PreviewModal isOpen={isPreviewOpen} onClose={closePreview} fileUrl={previewUrl} />
+      </Box>
+    );
+  };
+
+  const SubmissionCard = ({ submission, isExpanded, onClick }) => {
+    const fileCount = getFileCount(submission);
+    return (
+      <Box
+        borderWidth={1}
+        borderRadius="lg"
+        boxShadow="sm"
+        bg={isExpanded ? 'blue.50' : 'white'}
+        p={4}
+        transition="background 0.2s"
+        cursor="pointer"
+        onClick={onClick}
+        _hover={{ bg: 'blue.100' }}
+        w="100%"
+      >
+        <HStack spacing={4} justify="space-between">
+          <VStack align="start" flex={1} spacing={1}>
+            <Text fontWeight="bold">{submission.patient_name || 'N/A'}</Text>
+            <Text fontSize="sm" color="gray.600">
+              {new Date(submission.submitted_at).toLocaleDateString()}
+            </Text>
+          </VStack>
+          <HStack spacing={4}>
+            <Badge colorScheme={getStatusColor(submission.status)}>{submission.status}</Badge>
+            <Box bg="blue.600" color="white" borderRadius="full" fontSize="sm" fontWeight="bold" w="24px" h="24px" display="flex" alignItems="center" justifyContent="center">
+              {fileCount}
+            </Box>
+            {isMobile && (
+              <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setExpandedId(isExpanded ? null : submission.id); }}>
+                {isExpanded ? <ChevronUpIcon /> : <ChevronDownIcon />}
+              </Button>
+            )}
+          </HStack>
+        </HStack>
+        
+        {isMobile && isExpanded && (
+          <Box mt={4}>
+            <SubmissionDetails submission={submission} />
+          </Box>
+        )}
+      </Box>
+    );
+  };
+
   if (loading) {
     return <Text>Loading submissions...</Text>;
   }
 
   return (
-    <Box w="100vw" maxW="100vw" px={0} py={2} overflowX="auto" bg="white">
-      <Heading mb={2} size="md" textAlign="left">Submissions</Heading>
-      {/* Scoreboard for top mobile labs */}
-      <Box mb={4} p={3} bg="gray.100" borderRadius="lg" boxShadow="sm" maxW="100%">
-        <Heading size="sm" mb={2}>Top Mobile Labs (by Draws Submitted)</Heading>
-        <Box
-          display={{ base: 'flex', md: 'grid' }}
-          flexWrap={{ base: 'nowrap', md: 'wrap' }}
-          overflowX={{ base: 'auto', md: 'visible' }}
-          gridTemplateColumns={{ md: 'repeat(3, 1fr)' }}
-          gap={4}
-          alignItems="center"
-          pb={{ base: 2, md: 0 }}
-        >
-          {topLabs.length === 0 ? (
-            <Box color="gray.500">No submissions yet.</Box>
-          ) : (
-            topLabs.map(([name, count], idx) => (
-              <Box key={name} minW={{ base: '220px', md: '180px' }} maxW="240px" px={4} py={2} bg="white" borderRadius="md" boxShadow="xs" fontWeight="bold" fontSize="lg" border="1px solid #e0e0e0" textAlign="center">
-                <Box color="blue.600" fontSize="xl">#{idx + 1}</Box>
-                <Box>{name}</Box>
-                <Box color="green.600" fontSize="2xl">{count}</Box>
-                <Box fontSize="sm" color="gray.500">draws</Box>
-              </Box>
-            ))
-          )}
-        </Box>
-      </Box>
-      {/* Card List for Submissions */}
-      <VStack spacing={4} align="stretch" w="100%">
-        {filteredSubmissions.map((submission, idx) => {
-          const expanded = expandedId === submission.id;
-          const fileCount = getFileCount(submission);
-          return (
-            <Box
-              key={submission.id}
-              borderWidth={1}
-              borderRadius="lg"
-              boxShadow="sm"
-              bg={expanded ? 'blue.50' : idx % 2 === 0 ? 'white' : 'gray.100'}
-              p={4}
-              transition="background 0.2s"
-              cursor="pointer"
-              onClick={() => setExpandedId(expanded ? null : submission.id)}
-              _hover={{ bg: 'blue.100' }}
-              w="100%"
-              maxW="100vw"
-            >
-              {/* Collapsed view: key fields only */}
-              <HStack justify="space-between" align="center" w="100%" spacing={2}>
-                <Box textAlign="center" flex={1} fontWeight="bold">{new Date(submission.submitted_at).toLocaleDateString()}</Box>
-                <Box textAlign="center" flex={1}>{submission.patient_name || 'N/A'}</Box>
-                <Badge textAlign="center" flex={1} colorScheme={submission.status === 'completed' ? 'green' : submission.status === 'cancelled' ? 'red' : 'yellow'} fontSize="lg">{submission.status}</Badge>
-                <Box textAlign="center" flex={1}>{getLabName(submission.lab_id)}</Box>
-                <Badge textAlign="center" flex={1} colorScheme={submission.created_by_user === 'LAB' ? 'blue' : 'green'} fontSize="lg">{submission.created_by_user || 'LAB'}</Badge>
-                <Box flex={1} display="flex" justifyContent="center" alignItems="center">
-                  <Box bg="blue.600" color="white" borderRadius="full" fontSize="2xl" fontWeight="bold" w="48px" h="48px" display="flex" alignItems="center" justifyContent="center">{fileCount}</Box>
-                </Box>
-                <Button size="sm" variant="ghost" onClick={e => { e.stopPropagation(); setExpandedId(expanded ? null : submission.id); }}>
-                  {expanded ? <ChevronUpIcon /> : <ChevronDownIcon />}
-                </Button>
-              </HStack>
-              {/* Expanded view: all details and actions */}
-              {expanded && (
-                <Box mt={4}>
-                  <Text><b>Draw ID:</b> {submission.draw_code || submission.id}</Text>
-                  <Text><b>Phlebotomist:</b> {submission.phlebotomist_name || 'N/A'}</Text>
-                  <Text><b>Doctor:</b> {submission.doctor_name || 'N/A'}</Text>
-                  <Text><b>Insurance Company:</b> {submission.insurance_company || 'N/A'}</Text>
-                  <Text><b>Special Instructions:</b> {submission.special_instructions || 'N/A'}</Text>
-                  <Text><b>FedEx:</b> {submission.need_fedex_label ? (submission.fedex_label_url ? <Button as="a" href={submission.fedex_label_url} download target="_blank" size="sm" colorScheme="blue">View</Button> : 'Waiting for label') : 'No'}</Text>
-                  <Text><b>Lab Results:</b> {submission.lab_results_url ? <Button as="a" href={submission.lab_results_url} download target="_blank" size="sm" colorScheme="green">Download</Button> : 'Not uploaded'}</Text>
-                  <Text><b>Insurance Card:</b> {Array.isArray(submission.insurance_card_image) && submission.insurance_card_image.length > 0 && submission.insurance_card_image[0] ? <Button as="a" href={submission.insurance_card_image[0]} download target="_blank" size="sm" colorScheme="blue">View</Button> : 'No file'}</Text>
-                  <Text><b>Patient ID:</b> {Array.isArray(submission.patient_id_image) && submission.patient_id_image.length > 0 && submission.patient_id_image[0] ? <Button as="a" href={submission.patient_id_image[0]} download target="_blank" size="sm" colorScheme="blue">View</Button> : 'No file'}</Text>
-                  <Text><b>Deleted:</b> {submission.deleted_by_lab ? <Badge colorScheme="red">DELETED BY LAB</Badge> : ''}</Text>
-                  <Box mt={2} display="flex" gap={2} flexWrap="wrap">
-                    <Button as={RouterLink} to={`/admin/submissions/${submission.id}`} colorScheme="blue" size="sm">Edit/View</Button>
-                    <Button size="sm" colorScheme="blue" variant="outline" onClick={e => { e.stopPropagation(); handleLabChange(submission); }}>Change Lab</Button>
-                    <Select
-                      value={submission.status}
-                      onChange={e => { e.stopPropagation(); handleStatusChange(submission.id, e.target.value); }}
+    <Box w="100%" maxW="100%" px={4} py={2} bg="gray.50">
+      <Grid
+        templateColumns={{ base: "1fr", md: "350px 1fr" }}
+        gap={6}
+        h={{ md: "calc(100vh - 100px)" }}
+      >
+        <GridItem overflowY="auto">
+          <VStack spacing={4} align="stretch">
+            <Heading size="md">Submissions</Heading>
+            
+            <Box>
+              <Text fontSize="sm" fontWeight="medium" mb={2}>Filter by Status:</Text>
+              <Wrap spacing={2}>
+                {Object.entries(statusFilters).map(([status, isEnabled]) => (
+                  <WrapItem key={status}>
+                    <Button
                       size="sm"
-                      maxW="120px"
-                      fontWeight="bold"
-                      minW="100px"
+                      variant={isEnabled ? "solid" : "outline"}
+                      colorScheme={getStatusColor(status)}
+                      onClick={() => toggleStatusFilter(status)}
+                      textTransform="capitalize"
                     >
-                      <option value="pending">Pending</option>
-                      <option value="completed">Completed</option>
-                      <option value="cancelled">Cancelled</option>
-                    </Select>
-                  </Box>
-                </Box>
-              )}
+                      {status.replace('_', ' ')}
+                    </Button>
+                  </WrapItem>
+                ))}
+              </Wrap>
             </Box>
-          );
-        })}
-      </VStack>
 
-      {/* Lab Change Modal */}
+            <Input
+              placeholder="Search submissions..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              size="sm"
+            />
+
+            <VStack
+              align="stretch"
+              spacing={2}
+              overflowY="auto"
+              flex={1}
+              sx={{
+                '&::-webkit-scrollbar': {
+                  width: '8px',
+                  borderRadius: '8px',
+                  backgroundColor: 'rgba(0, 0, 0, 0.05)',
+                },
+                '&::-webkit-scrollbar-thumb': {
+                  backgroundColor: 'rgba(0, 0, 0, 0.1)',
+                  borderRadius: '8px',
+                },
+              }}
+            >
+              {filteredSubmissions.map((submission) => (
+                <SubmissionCard
+                  key={submission.id}
+                  submission={submission}
+                  isExpanded={expandedId === submission.id}
+                  onClick={() => {
+                    if (isMobile) {
+                      setExpandedId(expandedId === submission.id ? null : submission.id);
+                    } else {
+                      setSelectedSubmission(submission);
+                    }
+                  }}
+                />
+              ))}
+            </VStack>
+          </VStack>
+        </GridItem>
+
+        {!isMobile && (
+          <GridItem bg="gray.50" position="sticky" top={0}>
+            <SubmissionDetails submission={selectedSubmission} />
+          </GridItem>
+        )}
+      </Grid>
+
       <Modal isOpen={isOpen} onClose={onClose}>
         <ModalOverlay />
         <ModalContent>

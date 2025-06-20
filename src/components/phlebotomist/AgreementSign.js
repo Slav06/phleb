@@ -128,6 +128,18 @@ export default function AgreementSign() {
     );
   }
 
+  if (labInfo && (labInfo.send_agreement === 'no' || labInfo.send_agreement === false || labInfo.send_agreement === 0 || labInfo.send_agreement === null)) {
+    return (
+      <Box maxW="700px" mx="auto" mt={8} p={6} bg="white" borderRadius="xl" boxShadow="xl" textAlign="center">
+        <Heading size="lg" mb={4} color="green.600">No Agreement Required</Heading>
+        <Text fontSize="lg" mb={6}>No onboarding agreement is required for this lab. You may proceed to your dashboard.</Text>
+        <Button colorScheme="blue" size="lg" onClick={() => navigate(`/lab/${id}`)}>
+          Go to Dashboard
+        </Button>
+      </Box>
+    );
+  }
+
   return (
     <Box maxW="700px" mx="auto" mt={8} p={6} bg="white" borderRadius="xl" boxShadow="xl">
       <Heading size="lg" mb={3}>Sign Business Agreement</Heading>

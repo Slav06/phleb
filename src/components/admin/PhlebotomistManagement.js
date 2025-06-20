@@ -31,6 +31,7 @@ import {
   HStack,
   Heading,
   Badge,
+  Select,
 } from '@chakra-ui/react';
 import { EditIcon, DeleteIcon, AddIcon, CopyIcon, CheckIcon } from '@chakra-ui/icons';
 import { supabase } from '../../supabaseClient';
@@ -44,6 +45,7 @@ const PhlebotomistManagement = () => {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const toast = useToast();
   const { adminUser } = useOutletContext();
+  const [labs, setLabs] = useState([]);
 
   const [formData, setFormData] = useState({
     full_name: '',
@@ -55,13 +57,33 @@ const PhlebotomistManagement = () => {
     max_draw_fee: '',
     lab_draw_fee: '',
     service_areas: [{ zip_code: '', radius: 10 }],
+    send_agreement: 'yes',
+    lab_id: '',
   });
 
   const [copiedId, setCopiedId] = useState(null);
 
   useEffect(() => {
     fetchPhlebotomists();
+    fetchLabs();
   }, []);
+
+  useEffect(() => {
+    if (phlebotomists.length > 0 && labs.length > 0) {
+      const qualityLab = labs.find(l => l.name.toLowerCase().includes('quality laboratory'));
+      if (qualityLab) {
+        phlebotomists.forEach(async (phleb) => {
+          if (!phleb.lab_id || !labs.some(l => l.id === phleb.lab_id)) {
+            await supabase
+              .from('phlebotomist_profiles')
+              .update({ lab_id: qualityLab.id })
+              .eq('id', phleb.id);
+          }
+        });
+        fetchPhlebotomists();
+      }
+    }
+  }, [phlebotomists, labs]);
 
   const fetchPhlebotomists = async () => {
     try {
@@ -85,8 +107,27 @@ const PhlebotomistManagement = () => {
     }
   };
 
+  const fetchLabs = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('labs')
+        .select('id, name')
+        .order('name', { ascending: true });
+      if (error) throw error;
+      setLabs(data || []);
+    } catch (error) {
+      toast({
+        title: 'Error fetching labs',
+        description: error.message,
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    }
+  };
+
   const handleInputChange = (e) => {
-    const { name, value } = e.target;
+    const { name, value, type, checked } = e.target;
     setFormData((prev) => ({
       ...prev,
       [name]: value,
@@ -145,6 +186,7 @@ const PhlebotomistManagement = () => {
               max_draw_fee: parseFloat(formData.max_draw_fee),
               lab_draw_fee: typeof formData.lab_draw_fee === 'number' ? formData.lab_draw_fee : 0,
               service_areas: formData.service_areas,
+              lab_id: formData.lab_id,
             })
             .eq('id', userId);
           actionType = 'Updated Mobile Lab';
@@ -164,6 +206,7 @@ const PhlebotomistManagement = () => {
                 max_draw_fee: parseFloat(formData.max_draw_fee),
                 lab_draw_fee: typeof formData.lab_draw_fee === 'number' ? formData.lab_draw_fee : 0,
                 service_areas: formData.service_areas,
+                lab_id: formData.lab_id,
               },
             ]);
           actionType = 'Added Mobile Lab';
@@ -202,6 +245,7 @@ const PhlebotomistManagement = () => {
               max_draw_fee: parseFloat(formData.max_draw_fee),
               lab_draw_fee: typeof formData.lab_draw_fee === 'number' ? formData.lab_draw_fee : 0,
               service_areas: formData.service_areas,
+              lab_id: formData.lab_id,
             },
           ]);
         actionType = 'Added Mobile Lab';
@@ -254,6 +298,8 @@ const PhlebotomistManagement = () => {
       max_draw_fee: '',
       lab_draw_fee: '',
       service_areas: [{ zip_code: '', radius: 10 }],
+      send_agreement: 'yes',
+      lab_id: '',
     });
   };
 
@@ -289,6 +335,8 @@ const PhlebotomistManagement = () => {
       max_draw_fee: phlebotomist.max_draw_fee,
       lab_draw_fee: phlebotomist.lab_draw_fee,
       service_areas: phlebotomist.service_areas,
+      send_agreement: phlebotomist.send_agreement,
+      lab_id: phlebotomist.lab_id || '',
     });
     onOpen();
   };
@@ -406,6 +454,7 @@ const PhlebotomistManagement = () => {
               <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Service Areas</Th>
               <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Agreement</Th>
               <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Portal Link</Th>
+              <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Lab</Th>
               <Th fontSize="2xl" fontWeight="bold" py={2} px={2} border="1px solid #e0e0e0" color="white" textAlign="center" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">Actions</Th>
             </Tr>
           </Thead>
@@ -466,17 +515,18 @@ const PhlebotomistManagement = () => {
                   </Button>
                 </Td>
                 <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">
+                  {(() => {
+                    const lab = labs.find(l => l.id === phlebotomist.lab_id);
+                    if (!phlebotomist.lab_id) return <Badge colorScheme="red">Missing</Badge>;
+                    return lab ? lab.name : <Badge colorScheme="yellow">Unknown</Badge>;
+                  })()}
+                </Td>
+                <Td fontSize="xl" fontWeight="bold" py={1} px={2} border="1px solid #e0e0e0" textAlign="center">
                   <HStack spacing={2} justify="center">
                     <IconButton
                       icon={<EditIcon />}
                       onClick={() => handleEdit(phlebotomist)}
                       aria-label="Edit mobile lab"
-                    />
-                    <IconButton
-                      icon={<DeleteIcon />}
-                      colorScheme="red"
-                      onClick={() => handleDelete(phlebotomist.id)}
-                      aria-label="Delete mobile lab"
                     />
                   </HStack>
                 </Td>
@@ -534,12 +584,6 @@ const PhlebotomistManagement = () => {
                     onClick={() => handleEdit(phlebotomist)}
                     aria-label="Edit mobile lab"
                   />
-                  <IconButton
-                    icon={<DeleteIcon />}
-                    colorScheme="red"
-                    onClick={() => handleDelete(phlebotomist.id)}
-                    aria-label="Delete mobile lab"
-                  />
                 </HStack>
               </VStack>
             </Box>
@@ -563,7 +607,6 @@ const PhlebotomistManagement = () => {
                     name="full_name"
                     value={formData.full_name}
                     onChange={handleInputChange}
-                    isDisabled={!!selectedPhlebotomist}
                   />
                 </FormControl>
 
@@ -574,7 +617,6 @@ const PhlebotomistManagement = () => {
                     type="email"
                     value={formData.email}
                     onChange={handleInputChange}
-                    isDisabled={!!selectedPhlebotomist}
                   />
                 </FormControl>
 
@@ -584,7 +626,6 @@ const PhlebotomistManagement = () => {
                     name="phone"
                     value={formData.phone}
                     onChange={handleInputChange}
-                    isDisabled={!!selectedPhlebotomist}
                   />
                 </FormControl>
 
@@ -594,7 +635,6 @@ const PhlebotomistManagement = () => {
                     name="company_name"
                     value={formData.company_name}
                     onChange={handleInputChange}
-                    isDisabled={!!selectedPhlebotomist}
                   />
                 </FormControl>
 
@@ -604,8 +644,21 @@ const PhlebotomistManagement = () => {
                     name="company_address"
                     value={formData.company_address}
                     onChange={handleInputChange}
-                    isDisabled={!!selectedPhlebotomist}
                   />
+                </FormControl>
+
+                <FormControl isRequired>
+                  <FormLabel>Lab</FormLabel>
+                  <Select
+                    name="lab_id"
+                    value={formData.lab_id}
+                    onChange={handleInputChange}
+                    placeholder="Select a lab"
+                  >
+                    {labs.map((lab) => (
+                      <option key={lab.id} value={lab.id}>{lab.name}</option>
+                    ))}
+                  </Select>
                 </FormControl>
 
                 <FormControl isRequired>
@@ -701,6 +754,36 @@ const PhlebotomistManagement = () => {
                     </Button>
                   </VStack>
                 </FormControl>
+
+                <Box
+                  borderWidth={2}
+                  borderColor="blue.400"
+                  bg="blue.50"
+                  borderRadius="lg"
+                  p={4}
+                  my={4}
+                  textAlign="center"
+                >
+                  <FormControl isRequired>
+                    <FormLabel fontSize="lg" fontWeight="bold" color="blue.700">
+                      Should this phlebotomist receive the onboarding agreement?
+                    </FormLabel>
+                    <Select
+                      name="send_agreement"
+                      value={formData.send_agreement}
+                      onChange={handleInputChange}
+                      size="lg"
+                      fontWeight="bold"
+                      color={formData.send_agreement === 'yes' ? 'green.600' : 'red.600'}
+                      bg="white"
+                      borderColor="blue.300"
+                      required
+                    >
+                      <option value="yes">Yes (send onboarding agreement)</option>
+                      <option value="no">No (skip onboarding agreement)</option>
+                    </Select>
+                  </FormControl>
+                </Box>
 
                 <Button
                   type="submit"

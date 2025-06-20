@@ -16,7 +16,7 @@ function PhlebotomistLayout() {
         // Check if the lab exists and get agreement status
         const { data, error } = await supabase
           .from('phlebotomist_profiles')
-          .select('agreement_signed')
+          .select('agreement_signed, send_agreement')
           .eq('id', id)
           .single();
 
@@ -29,18 +29,24 @@ function PhlebotomistLayout() {
           return;
         }
 
-        // If agreement is signed and user is on /agreement, redirect to dashboard
-        if (data.agreement_signed && location.pathname.endsWith('/agreement')) {
-          console.log('Agreement signed, redirecting to dashboard');
-          navigate(`/lab/${id}`, { replace: true });
-          return;
-        }
-        
-        // If agreement not signed and not on /agreement, redirect to agreement page
-        if (!data.agreement_signed && !location.pathname.endsWith('/agreement')) {
-          console.log('Agreement not signed, redirecting to agreement page');
-          navigate(`/lab/${id}/agreement`, { replace: true });
-          return;
+        // If agreement is required and not signed and not on /agreement, redirect to agreement page
+        const needsAgreement = !(
+          data.send_agreement === 'no' ||
+          data.send_agreement === false ||
+          data.send_agreement === 0 ||
+          data.send_agreement === null
+        );
+        if (needsAgreement) {
+          if (data.agreement_signed && location.pathname.endsWith('/agreement')) {
+            console.log('Agreement signed, redirecting to dashboard');
+            navigate(`/lab/${id}`, { replace: true });
+            return;
+          }
+          if (!data.agreement_signed && !location.pathname.endsWith('/agreement')) {
+            console.log('Agreement not signed, redirecting to agreement page');
+            navigate(`/lab/${id}/agreement`, { replace: true });
+            return;
+          }
         }
 
         setLoading(false);
